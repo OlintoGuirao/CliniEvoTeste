@@ -1,0 +1,27 @@
+{
+  "name": "aura-secretaria-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:restart": "pm2 restart aura-secretaria-backend",
+    "pm2:stop": "pm2 stop aura-secretaria-backend",
+    "pm2:delete": "pm2 delete aura-secretaria-backend",
+    "pm2:logs": "pm2 logs aura-secretaria-backend"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "axios": "^1.7.9",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pdf-parse": "^2.4.5",
+    "pix-utils": "^2.8.2",
+    "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0",
+    "uuid": "^10.0.0"
+  }
+}

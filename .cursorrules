@@ -1,0 +1,12 @@
+# Regras do projeto
+
+## Páginas de detalhe de tratamento
+
+Ao criar ou editar páginas de **detalhe de tratamento** (ex.: Programa de Emagrecimento, Aplicação de Botox, novos tratamentos):
+
+1. **Header:** Usar sempre o componente `TreatmentDetailHeader` (`@/components/TreatmentDetailHeader`) com back no mobile dentro do card do título.
+2. **Gráficos de linha (Recharts):** Usar o hook `useChartMobileBehavior` (`@/hooks/use-chart-mobile-behavior`) para tooltip em click no mobile, dots maiores e pointer-events: none nos pontos no mobile.
+3. **Sessões:** Card "Registro de sessões" acima dos gráficos; botão Excluir com AlertDialog; medidas recolhíveis no mobile (Ver medidas / Ocultar medidas).
+4. **Antes x Depois (fotos):** Antes = fotos iniciais (ou primeira sessão); Depois = última sessão.
+
+Ver detalhes em **docs/PADROES_TRATAMENTOS.md**.

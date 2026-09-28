@@ -1,0 +1,12 @@
+{{!-- Template genérico: lista de campos para qualquer procedimento sem partial específico --}}
+<section class="section-block">
+  <h2 class="section-title">Dados do Procedimento</h2>
+  <div class="card-grid card-grid-2">
+    {{#each contentFields}}
+      <div class="field-card">
+        <div class="field-label">{{label}}</div>
+        <div class="field-value">{{default value '—'}}</div>
+      </div>
+    {{/each}}
+  </div>
+</section>

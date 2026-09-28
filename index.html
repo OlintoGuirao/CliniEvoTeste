@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>CliniEvo</title>
+    <!-- CRITICAL: Theme applied BEFORE React and CSS to eliminate FOUC. Same keys as next-themes (theme) + app (clienievo_theme_palette, clienievo_accent_color). -->
+    <script>
+      (function() {
+        var root = document.documentElement;
+        var theme = localStorage.getItem('theme');
+        var palette = localStorage.getItem('clienievo_theme_palette');
+        var accent = localStorage.getItem('clienievo_accent_color');
+        var isDark = theme === 'dark' || (theme !== 'light' && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) root.classList.add('dark'); else root.classList.remove('dark');
+        var presets = { default: { l: '173 58% 39%', d: '173 58% 45%' }, teal: { l: '174 61% 38%', d: '174 61% 44%' }, blue: { l: '221 83% 53%', d: '221 83% 58%' }, rose: { l: '346 77% 50%', d: '346 77% 55%' }, violet: { l: '262 83% 58%', d: '262 83% 63%' }, emerald: { l: '160 84% 39%', d: '160 84% 45%' }, amber: { l: '32 95% 44%', d: '32 95% 50%' } };
+        var value = (palette && palette !== 'default') || (accent && accent !== 'default') ? (palette || accent) : 'default';
+        var p = presets[value] || presets.default;
+        var primary = isDark ? p.d : p.l;
+        var fg = isDark ? '220 25% 8%' : '0 0% 100%';
+        root.style.setProperty('--primary', primary, 'important');
+        root.style.setProperty('--primary-foreground', fg, 'important');
+        root.style.setProperty('--background', isDark ? '220 25% 8%' : '0 0% 100%', 'important');
+        root.style.setProperty('--foreground', isDark ? '0 0% 95%' : '220 30% 15%', 'important');
+      })();
+    </script>
+    <style>
+      html, body, #root {
+        min-height: 100%;
+        margin: 0;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+      #root { min-width: 0; }
+      html { background: hsl(var(--background)); }
+      body { background: hsl(var(--background)); }
+      #root { background: hsl(var(--background)); }
+    </style>
+    <meta name="description" content="CliniEvo - Gestão de Tratamentos Estéticos" />
+    <meta name="author" content="CliniEvo" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/CliniEvo.png" />
+
+    <meta property="og:title" content="CliniEvo" />
+    <meta property="og:description" content="CliniEvo - Gestão de Tratamentos Estéticos" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/CliniEvo.png" />
+    <meta property="og:image:alt" content="CliniEvo - Gestão de Tratamentos Estéticos" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@CliniEvo" />
+    <meta name="twitter:image" content="/CliniEvo.png" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <!-- Link de suporte para clientes presos em versão antiga: ?atualizar=1 (ou force_update=1) limpa SW + caches e recarrega. -->
+    <script>
+      (function () {
+        function stripParamsAndReload() {
+          var u = new URL(window.location.href);
+          u.searchParams.delete("atualizar");
+          u.searchParams.delete("force_update");
+          window.location.replace(u.pathname + u.search + u.hash);
+        }
+        try {
+          var q = new URLSearchParams(window.location.search);
+          if (q.get("atualizar") !== "1" && q.get("force_update") !== "1") return;
+          var p = Promise.resolve();
+          if ("serviceWorker" in navigator) {
+            p = navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            });
+          }
+          p.then(function () {
+            if (!("caches" in window)) return;
+            return caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          })
+            .then(stripParamsAndReload)
+            .catch(stripParamsAndReload);
+        } catch (e) {
+          stripParamsAndReload();
+        }
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

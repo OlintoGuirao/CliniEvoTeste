@@ -1,0 +1,106 @@
+workflows:
+  ios_capacitor_ipa:
+    name: iOS Simulator Build (Free Test)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    environment:
+      node: 22.16.0
+      xcode: latest
+      cocoapods: default
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        XCODE_CONFIGURATION: "Debug"
+        IOS_SIMULATOR_DESTINATION: "generic/platform=iOS Simulator"
+        BUNDLE_ID: "com.olintoguirrao.clinievo"
+        EXPORT_OPTIONS_PLIST: "scripts/ExportOptions.plist"
+
+    cache:
+      cache_paths:
+        - ~/.npm
+        - ~/.cocoapods/repos
+        - ios/App/Pods
+
+    scripts:
+      - name: Validate project structure
+        script: |
+          set -euo pipefail
+          echo "Node: $(node -v)"
+          echo "NPM: $(npm -v)"
+          xcodebuild -version
+          test -f package.json
+          test -d ios/App
+          test -d "$XCODE_PROJECT" || (echo "Projeto Xcode nao encontrado em $XCODE_PROJECT" && exit 1)
+
+      - name: Resolve Xcode container (workspace/project)
+        script: |
+          set -euo pipefail
+          if [ -f "$XCODE_WORKSPACE/contents.xcworkspacedata" ]; then
+            echo "XCODE_CONTAINER_FLAG=-workspace" >> "$CM_ENV"
+            echo "XCODE_CONTAINER_PATH=$XCODE_WORKSPACE" >> "$CM_ENV"
+            echo "Usando workspace: $XCODE_WORKSPACE"
+          else
+            echo "XCODE_CONTAINER_FLAG=-project" >> "$CM_ENV"
+            echo "XCODE_CONTAINER_PATH=$XCODE_PROJECT" >> "$CM_ENV"
+            echo "Workspace nao encontrado. Usando project: $XCODE_PROJECT"
+          fi
+
+      - name: Install dependencies
+        script: |
+          set -euo pipefail
+          npm ci || npm install
+
+      - name: Build React web app
+        script: |
+          set -euo pipefail
+          npm run build
+          test -d dist || (echo "Pasta dist nao foi gerada. Verifique capacitor.config.ts (webDir)." && exit 1)
+
+      - name: Sync Capacitor iOS
+        script: |
+          set -euo pipefail
+          npx cap sync ios
+
+      - name: Install iOS pods
+        script: |
+          set -euo pipefail
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App
+            pod install --repo-update
+          else
+            echo "Podfile nao encontrado. Pulando pod install (Capacitor com SPM)."
+          fi
+
+      - name: Re-resolve Xcode container after pods
+        script: |
+          set -euo pipefail
+          if [ -f "$XCODE_WORKSPACE/contents.xcworkspacedata" ]; then
+            echo "XCODE_CONTAINER_FLAG=-workspace" >> "$CM_ENV"
+            echo "XCODE_CONTAINER_PATH=$XCODE_WORKSPACE" >> "$CM_ENV"
+            echo "Usando workspace para build: $XCODE_WORKSPACE"
+          else
+            echo "XCODE_CONTAINER_FLAG=-project" >> "$CM_ENV"
+            echo "XCODE_CONTAINER_PATH=$XCODE_PROJECT" >> "$CM_ENV"
+            echo "Workspace ainda nao encontrado. Build com project: $XCODE_PROJECT"
+          fi
+
+      - name: Build iOS app for Simulator (no signing)
+        script: |
+          set -euo pipefail
+          xcodebuild \
+            "$XCODE_CONTAINER_FLAG" "$XCODE_CONTAINER_PATH" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration "$XCODE_CONFIGURATION" \
+            -sdk iphonesimulator \
+            -destination "$IOS_SIMULATOR_DESTINATION" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+    artifacts:
+      - /Users/builder/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/*.app
+      - /Users/builder/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/*.dSYM
+      - /tmp/xcodebuild_logs/*.log
+

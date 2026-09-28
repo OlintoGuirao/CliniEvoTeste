@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relatório — {{header.patientName}}</title>
+  <style>
+    {{{embeddedStyles}}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    {{!-- Header fixo: Logo (esquerda) + Dados do paciente (direita) --}}
+    <header class="doc-header">
+      <div class="header-left">
+        {{#if header.logoUrl}}
+          <img src="{{header.logoUrl}}" alt="Logo" class="header-logo" />
+        {{else}}
+          <span class="header-clinic-placeholder">{{footer.clinicName}}</span>
+        {{/if}}
+        <h1 class="doc-title">Resumo de Evolução</h1>
+        {{#if header.procedureName}}
+          <p class="doc-subtitle">{{header.procedureName}}</p>
+        {{/if}}
+      </div>
+      <div class="header-right">
+        <p class="patient-name">{{header.patientName}}</p>
+        <p class="header-meta">Data do procedimento: <strong>{{header.procedureDate}}</strong></p>
+        {{#if header.treatmentStartDate}}
+          <p class="header-meta">Início do tratamento: {{header.treatmentStartDate}}</p>
+        {{/if}}
+      </div>
+    </header>
+
+    <hr class="header-sep" />
+
+    {{!-- Conteúdo dinâmico por tipo de procedimento --}}
+    <main class="doc-main">
+      {{> (lookup . 'partialName')}}
+    </main>
+
+    {{!-- Footer fixo: Clínica, CRM, Paginação --}}
+    <footer class="doc-footer">
+      <div class="footer-left">
+        <span class="footer-clinic">{{footer.clinicName}}</span>
+        {{#if footer.crm}}
+          <span class="footer-crm">CRM {{footer.crm}}</span>
+        {{/if}}
+        {{#if footer.clinicContact}}
+          <span class="footer-contact">{{footer.clinicContact}}</span>
+        {{/if}}
+      </div>
+      <div class="footer-right">
+        <span class="footer-page">Página 1</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

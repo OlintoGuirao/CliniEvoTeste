@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CliniEvo</string>
+    <string name="title_activity_main">CliniEvo</string>
+    <string name="package_name">com.olintoguirrao.clinievo</string>
+    <string name="custom_url_scheme">com.olintoguirrao.clinievo</string>
+</resources>

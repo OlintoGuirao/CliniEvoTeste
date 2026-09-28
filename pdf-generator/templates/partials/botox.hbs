@@ -1,0 +1,94 @@
+{{!-- Procedimento: Botox (Toxina Botulínica) --}}
+
+<section class="section-block">
+  <h2 class="section-title">Informações do Produto</h2>
+  <div class="card-grid card-grid-2">
+    <div class="field-card">
+      <div class="field-label">Produto Utilizado</div>
+      <div class="field-value">{{default produtoUtilizado '—'}}</div>
+    </div>
+    <div class="field-card">
+      <div class="field-label">Marca da Toxina</div>
+      <div class="field-value">{{default marcaToxina '—'}}</div>
+    </div>
+    <div class="field-card">
+      <div class="field-label">Lote</div>
+      <div class="field-value">{{default lote '—'}}</div>
+    </div>
+    <div class="field-card">
+      <div class="field-label">Data de Validade</div>
+      <div class="field-value">{{default dataValidade '—'}}</div>
+    </div>
+  </div>
+</section>
+
+<section class="section-block">
+  <h2 class="section-title">Detalhes Técnicos da Aplicação</h2>
+  <div class="card-grid card-grid-3">
+    <div class="field-card">
+      <div class="field-label">Diluição Utilizada</div>
+      <div class="field-value">{{default diluicaoUtilizada '—'}}</div>
+    </div>
+    <div class="field-card">
+      <div class="field-label">Quantidade e/ou Unidade Total</div>
+      <div class="field-value">{{default quantidadeUnidade '—'}}</div>
+    </div>
+    <div class="field-card">
+      <div class="field-label">Número de Pontos de Aplicação</div>
+      <div class="field-value">{{default numeroPontos '—'}}</div>
+    </div>
+  </div>
+</section>
+
+<section class="section-block">
+  <h2 class="section-title">Regiões Tratadas</h2>
+  <ul class="regions-list">
+    {{#each regioesList}}
+      <li class="region-item {{#if checked}}checked{{/if}}">
+        <span class="check"></span>
+        <span>{{label}}</span>
+      </li>
+    {{/each}}
+  </ul>
+</section>
+
+<section class="section-block visual-section">
+  <h2 class="section-title">Mapa de Aplicação e Transformação</h2>
+  {{#if mapaAplicacaoUrl}}
+  <div class="map-container">
+    <img src="{{mapaAplicacaoUrl}}" alt="Mapa de aplicação" />
+  </div>
+  {{else}}
+  <div class="map-container">
+    <span class="field-value" style="color: var(--color-text-muted);">Mapa não disponível</span>
+  </div>
+  {{/if}}
+
+  <p class="visual-title">Transformação — Antes e Depois</p>
+  <div class="before-after">
+    <div class="before-after-box">
+      <span class="before-after-label">Antes</span>
+      {{#if fotoAntesUrl}}
+        <img src="{{fotoAntesUrl}}" alt="Antes" />
+      {{else}}
+        <span class="field-value placeholder-text">Sem foto</span>
+      {{/if}}
+    </div>
+    <div class="before-after-box">
+      <span class="before-after-label">Depois</span>
+      {{#if fotoDepoisUrl}}
+        <img src="{{fotoDepoisUrl}}" alt="Depois" />
+      {{else}}
+        <span class="field-value placeholder-text">Sem foto</span>
+      {{/if}}
+    </div>
+  </div>
+</section>
+
+{{#if careText}}
+<section class="signature-line">
+  <div class="signature-label">Assinatura do profissional</div>
+  <div style="width: 120px; border-bottom: 1px solid var(--color-border); margin-top: 24px;"></div>
+  <p class="care-text">{{careText}}</p>
+</section>
+{{/if}}

@@ -1,0 +1,350 @@
+/* ==========================================================================
+   Medical High-End — Estilo minimalista para relatórios de procedimentos
+   ========================================================================== */
+
+:root {
+  --color-bg: #fafaf8;
+  --color-paper: #fcfcfb;
+  --color-text: #373a3e;
+  --color-text-muted: #6c757d;
+  --color-accent: #b49664;
+  --color-accent-soft: #e4d8bc;
+  --color-border: #e4e4e2;
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 0;
+  background: var(--color-paper);
+}
+
+/* ---- Header ---- */
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-lg);
+  padding-bottom: var(--space-md);
+}
+
+.header-left {
+  flex: 0 1 auto;
+}
+
+.header-right {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.header-logo {
+  max-height: 48px;
+  max-width: 180px;
+  object-fit: contain;
+  display: block;
+  margin-bottom: var(--space-sm);
+}
+
+.header-clinic-placeholder {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent);
+  letter-spacing: 0.02em;
+  display: block;
+  margin-bottom: var(--space-sm);
+}
+
+.doc-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin: 0 0 var(--space-xs) 0;
+  letter-spacing: 0.01em;
+}
+
+.doc-subtitle {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.patient-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-xs) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.header-meta {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.header-sep {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 0 0 var(--space-lg) 0;
+}
+
+/* ---- Main content ---- */
+.doc-main {
+  margin-bottom: var(--space-xl);
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-md) 0;
+  padding-bottom: var(--space-xs);
+  letter-spacing: 0.02em;
+}
+
+.card-grid {
+  display: grid;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.card-grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.card-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.field-card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.field-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.field-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Checklist (regiões tratadas) */
+.regions-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm) var(--space-xl);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-lg) 0;
+}
+
+.region-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 10px;
+  color: var(--color-text);
+}
+
+.region-item .check {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.region-item.checked .check {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* Mapa e fotos */
+.visual-section {
+  margin-top: var(--space-lg);
+}
+
+.visual-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.map-container {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.map-container img {
+  max-width: 100%;
+  height: auto;
+  max-height: 280px;
+  object-fit: contain;
+}
+
+.before-after {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+  margin-top: var(--space-md);
+  page-break-inside: avoid;
+}
+
+.before-after-box {
+  text-align: center;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-accent-soft);
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+.before-after-box img {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+}
+
+.before-after-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  padding: var(--space-xs) 0;
+  background: var(--color-paper);
+  width: 100%;
+  font-weight: 600;
+}
+
+/* Placeholder "Sem foto" sempre visível */
+.before-after-box .placeholder-text,
+.before-after-box .field-value {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Footer */
+.doc-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) 0;
+  font-size: 9px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-paper);
+}
+
+.footer-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.footer-clinic {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.footer-crm,
+.footer-contact {
+  color: var(--color-text-muted);
+}
+
+.footer-page {
+  color: var(--color-text-muted);
+}
+
+/* Assinatura e cuidados (Botox) */
+.signature-line {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.signature-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.care-text {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-top: var(--space-md);
+  max-width: 100%;
+}
+
+/* Paginação para impressão/PDF */
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm 18mm;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  .page {
+    min-height: auto;
+    page-break-after: always;
+  }
+  .page:last-child {
+    page-break-after: auto;
+  }
+}
