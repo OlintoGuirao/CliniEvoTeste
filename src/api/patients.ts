@@ -18,6 +18,8 @@ export interface PatientRow {
   profile_photo_url: string | null;
   treatment_start_date: string | null;
   is_active: boolean;
+  is_minor?: boolean;
+  legal_responsible_name?: string | null;
   created_at: string;
   registration_completed_at: string | null;
   professional_id?: string;

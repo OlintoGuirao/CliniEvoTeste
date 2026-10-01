@@ -41,6 +41,15 @@ import { useClinicPatientOrigins } from '@/hooks/use-clinic-patient-origins';
 import { MobileBottomSafeSpacer } from '@/components/layout/mobile';
 import { LGPD_CONSENT_TEXT } from '@/lib/lgpdConsent';
 import { cn } from '@/lib/utils';
+import { isPatientMinor } from '@/lib/patientAge';
+import { formatPhoneForWhatsApp } from '@/lib/evolutionPdf';
+import { buildAnamneseWhatsAppMessage } from '@/lib/reportShare';
+import { loadWhatsappManualTemplates } from '@/lib/loadWhatsappManualTemplates';
+import { sendWhatsappTextPreferEvolution } from '@/lib/sendWhatsappTextPreferEvolution';
+import {
+  buildPublicAnamneseUrl,
+  ensurePatientAnamnesePublicSlug,
+} from '@/services/api/patientAnamneseApi';
 
 function toYmd(date: Date | undefined): string | null {
   if (!date) return null;
@@ -133,10 +142,22 @@ export default function NewPatient() {
   });
   const [lgpdSignatureData, setLgpdSignatureData] = useState<string | null>(null);
   const [showSalonLgpd, setShowSalonLgpd] = useState(false);
+  const [isMinor, setIsMinor] = useState(false);
+  const [legalResponsibleName, setLegalResponsibleName] = useState('');
+  const [sendAnamneseAfterSave, setSendAnamneseAfterSave] = useState(false);
   const [anamneseData, setAnamneseData] = useState<AnamneseData>({});
   const updateAnamnese = (key: keyof AnamneseData, value: string | undefined) => {
     setAnamneseData((prev) => ({ ...prev, [key]: value || undefined }));
   };
+
+  const birthSuggestsMinor = isPatientMinor(formData.date_of_birth);
+
+  function handleBirthDateChange(date: Date | undefined) {
+    setFormData({ ...formData, date_of_birth: date });
+    if (date && isPatientMinor(date)) {
+      setIsMinor(true);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,6 +204,11 @@ export default function NewPatient() {
       }
     }
 
+    if (isMinor && !legalResponsibleName.trim()) {
+      toast.error('Informe o nome do responsável legal para paciente menor de idade.');
+      return;
+    }
+
     setLoadingConsent(true);
 
     try {
@@ -221,6 +247,8 @@ export default function NewPatient() {
         emergency_contact_phone:
           copy.isSalon || isClinicAccount ? null : formData.emergency_contact_phone.trim() || null,
         general_notes: copy.isSalon ? null : formData.general_notes.trim() || null,
+        is_minor: isMinor,
+        legal_responsible_name: isMinor ? legalResponsibleName.trim() || null : null,
         registration_completed_at: new Date().toISOString(),
       });
 
@@ -239,17 +267,68 @@ export default function NewPatient() {
       }
 
       if (!copy.isSalon) {
+        // Se for enviar a ficha ao paciente, não assina aqui: o RPC ensure_* reabre
+        // anamneses já assinadas (limpa signature). Mantém rascunho para o paciente completar.
         const { error: anamneseError } = await supabase.from('patient_anamnese').upsert(
           {
             patient_id: patient.id,
             data: anamneseData,
-            signature_data: lgpdSignatureData.trim(),
-            signed_at: new Date().toISOString(),
+            signature_data: sendAnamneseAfterSave ? null : lgpdSignatureData.trim(),
+            signed_at: sendAnamneseAfterSave ? null : new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'patient_id' }
         );
         if (anamneseError) throw anamneseError;
+
+        if (sendAnamneseAfterSave) {
+          const wa = formatPhoneForWhatsApp(phoneDigits);
+          if (!wa) {
+            toast.message('Paciente cadastrado. Informe o telefone para enviar a ficha de anamnese.');
+          } else {
+            try {
+              const slug = await ensurePatientAnamnesePublicSlug(patient.id);
+              const url = buildPublicAnamneseUrl(slug);
+              const templates = await loadWhatsappManualTemplates(professionalId);
+              const entry = templates.anamnese_invite;
+              if (!entry.enabled) {
+                toast.message(
+                  'Paciente cadastrado. O envio da anamnese está desativado em Mensagens padrão.'
+                );
+              } else {
+                const message = buildAnamneseWhatsAppMessage({
+                  patientName: formData.full_name,
+                  clinicName: profile?.app_name || profile?.full_name,
+                  anamneseUrl: url,
+                  template: entry.message,
+                });
+                const sent = await sendWhatsappTextPreferEvolution({
+                  professionalId: professionalId!,
+                  phone: wa,
+                  message,
+                  patientId: patient.id,
+                });
+                if (sent.viaEvolution || sent.viaWaMe) {
+                  toast.success(
+                    sent.viaEvolution
+                      ? 'Ficha de anamnese enviada pelo WhatsApp.'
+                      : 'Abrindo WhatsApp com a ficha de anamnese…'
+                  );
+                } else {
+                  toast.message(
+                    sent.error ||
+                      'Paciente cadastrado. Não foi possível enviar a anamnese pelo WhatsApp.'
+                  );
+                }
+              }
+            } catch (sendErr) {
+              console.error(sendErr);
+              toast.message(
+                'Paciente cadastrado. Não foi possível enviar a ficha de anamnese automaticamente.'
+              );
+            }
+          }
+        }
       }
 
       if (isClinicAccount) {
@@ -325,10 +404,15 @@ export default function NewPatient() {
                   <DateInputField
                     inputId="date_of_birth"
                     value={formData.date_of_birth}
-                    onChange={(date) => setFormData({ ...formData, date_of_birth: date })}
+                    onChange={handleBirthDateChange}
                     maxDate={new Date()}
                     fromYear={1920}
                   />
+                  {birthSuggestsMinor ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      A data de nascimento indica paciente menor de idade.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -347,6 +431,38 @@ export default function NewPatient() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <Checkbox
+                    id="is_minor_salon"
+                    checked={isMinor}
+                    onCheckedChange={(checked) => {
+                      const next = checked === true;
+                      setIsMinor(next);
+                      if (!next) setLegalResponsibleName('');
+                    }}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="is_minor_salon" className="cursor-pointer font-medium leading-none">
+                      Paciente menor de idade
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Marque para registrar o responsável legal do menor.
+                    </p>
+                  </div>
+                </div>
+                {isMinor ? (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="legal_responsible_name_salon">Nome do responsável legal *</Label>
+                    <Input
+                      id="legal_responsible_name_salon"
+                      value={legalResponsibleName}
+                      onChange={(e) => setLegalResponsibleName(e.target.value)}
+                      placeholder="Nome completo do responsável"
+                      required
+                    />
+                  </div>
+                ) : null}
 
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="phone">Telefone / WhatsApp *</Label>
@@ -426,10 +542,15 @@ export default function NewPatient() {
               <DateInputField
                 inputId="date_of_birth"
                 value={formData.date_of_birth}
-                onChange={(date) => setFormData({ ...formData, date_of_birth: date })}
+                onChange={handleBirthDateChange}
                 maxDate={new Date()}
                 fromYear={1920}
               />
+              {birthSuggestsMinor ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  A data de nascimento indica paciente menor de idade.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">
@@ -448,6 +569,38 @@ export default function NewPatient() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <Checkbox
+                id="is_minor"
+                checked={isMinor}
+                onCheckedChange={(checked) => {
+                  const next = checked === true;
+                  setIsMinor(next);
+                  if (!next) setLegalResponsibleName('');
+                }}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="is_minor" className="cursor-pointer font-medium leading-none">
+                  Paciente menor de idade
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque para registrar o responsável legal do menor.
+                </p>
+              </div>
+            </div>
+            {isMinor ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="legal_responsible_name">Nome do responsável legal *</Label>
+                <Input
+                  id="legal_responsible_name"
+                  value={legalResponsibleName}
+                  onChange={(e) => setLegalResponsibleName(e.target.value)}
+                  placeholder="Nome completo do responsável"
+                  required
+                />
+              </div>
+            ) : null}
 
             {isClinicAccount ? (
               <div className="space-y-2 sm:col-span-2">
@@ -667,6 +820,21 @@ export default function NewPatient() {
             <CardDescription className="text-xs">Sim/Não e detalhe quando necessário.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 md:space-y-4 p-3 md:p-6 pt-0">
+            <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <Checkbox
+                id="send_anamnese_after_save"
+                checked={sendAnamneseAfterSave}
+                onCheckedChange={(checked) => setSendAnamneseAfterSave(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="send_anamnese_after_save" className="cursor-pointer font-medium leading-none">
+                  Enviar ficha de anamnese ao paciente após salvar
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Gera o link público e envia pelo WhatsApp do paciente (Evolution, com fallback).
+                </p>
+              </div>
+            </div>
             {PERGUNTAS_ANAMNESE.map(({ key, label, simQual }) => (
               <div key={key} className="space-y-2">
                 <Label className="text-sm">{label}</Label>

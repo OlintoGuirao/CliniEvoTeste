@@ -12,14 +12,23 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PageLoading } from '@/components/layout/PageLoading';
 import { ArrowLeft, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 interface Procedure {
   id: string;
   name: string;
   slug: string;
 }
+
+function normalizeProcedureName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+const SOLD_PLAN_STATUSES = ['authorized', 'negotiating'] as const;
 
 export default function NewPatientSessionPage() {
   const { id: patientId } = useParams<{ id: string }>();
@@ -32,6 +41,7 @@ export default function NewPatientSessionPage() {
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [filteredFromPlans, setFilteredFromPlans] = useState(false);
 
   useEffect(() => {
     if (!patientId || !profile?.id) return;
@@ -39,8 +49,57 @@ export default function NewPatientSessionPage() {
       const { data: p } = await supabase.from('patients').select('full_name').eq('id', patientId).single();
       setPatientName((p as { full_name: string } | null)?.full_name ?? '');
 
-      const procs = await getProceduresForProfile(profile.id);
-      setProcedures(procs as Procedure[]);
+      const procs = (await getProceduresForProfile(profile.id)) as Procedure[];
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { data: plans } = await db
+        .from('dental_treatment_plans')
+        .select('id')
+        .eq('patient_id', patientId)
+        .in('status', [...SOLD_PLAN_STATUSES]);
+
+      const planIds = ((plans ?? []) as Array<{ id: string }>).map((row) => String(row.id));
+      const { data: items } = planIds.length
+        ? await db
+            .from('dental_plan_items')
+            .select('procedure_id, procedure_name')
+            .in('treatment_plan_id', planIds)
+            .neq('status', 'rejected')
+        : { data: [] };
+
+      const planItems = (items ?? []) as Array<{
+        procedure_id?: string | null;
+        procedure_name?: string | null;
+      }>;
+
+      if (planItems.length === 0) {
+        setFilteredFromPlans(false);
+        setProcedures(procs);
+        return;
+      }
+
+      const byId = new Set(
+        planItems
+          .map((row) => (row.procedure_id ? String(row.procedure_id) : ''))
+          .filter(Boolean)
+      );
+      const byName = new Set(
+        planItems
+          .map((row) => normalizeProcedureName(String(row.procedure_name ?? '')))
+          .filter(Boolean)
+      );
+
+      const filtered = procs.filter((proc) => {
+        if (byId.has(proc.id)) return true;
+        return byName.has(normalizeProcedureName(proc.name));
+      });
+
+      setFilteredFromPlans(true);
+      setProcedures(filtered.length > 0 ? filtered : procs);
+      if (filtered.length === 0) {
+        setFilteredFromPlans(false);
+      }
     })().finally(() => setLoading(false));
   }, [patientId, profile?.id]);
 
@@ -178,7 +237,11 @@ export default function NewPatientSessionPage() {
         <Card>
           <CardHeader className="pb-2 md:pb-3 p-3 md:p-6">
             <CardTitle className="text-sm md:text-base font-semibold">Procedimentos realizados</CardTitle>
-            <CardDescription className="text-xs">Marque os procedimentos feitos nesta sessão.</CardDescription>
+            <CardDescription className="text-xs">
+              {filteredFromPlans
+                ? 'Exibindo apenas procedimentos dos planos aceitos/vendidos do paciente.'
+                : 'Marque os procedimentos feitos nesta sessão.'}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-3 md:p-6 pt-0">
             {procedures.length === 0 ? (

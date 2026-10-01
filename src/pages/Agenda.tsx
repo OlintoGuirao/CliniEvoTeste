@@ -101,12 +101,18 @@ import {
   ClinicQuickPatientDialog,
 } from '@/components/clinic/ClinicQuickPatientDialog';
 import { ClinicAgendaBookingFields } from '@/components/clinic/ClinicAgendaBookingFields';
+import {
+  ClinicTreatmentPlanSelector,
+  type ClinicTreatmentPlanSelectedItem,
+} from '@/components/clinic/ClinicTreatmentPlanSelector';
 import { ClinicAppointmentDetailsDialog } from '@/components/clinic/ClinicAppointmentDetailsDialog';
 import { ClinicAgendaBoard } from '@/components/clinic/ClinicAgendaBoard';
 import {
   clinicProcedureLabelFromNotes,
   stripClinicAppointmentMetadataFromNotes,
 } from '@/lib/clinicAppointmentDetails';
+import { appendClinicTreatmentItemsToNotes } from '@/lib/clinicTreatmentPlanNotes';
+import { filterAgendaSelectablePatients } from '@/lib/agendaPatientSelection';
 import { useClinicMemberRole } from '@/hooks/use-clinic-member-role';
 import { useClinicMaster } from '@/hooks/use-clinic-master';
 import {
@@ -296,6 +302,7 @@ interface Patient {
   nickname?: string | null;
   phone: string | null;
   is_active?: boolean;
+  registration_completed_at?: string | null;
 }
 
 function getAgendaPatientLabel(patient: Patient, isSalon: boolean): string {
@@ -1212,6 +1219,9 @@ export default function Agenda() {
   const [bookingAgendaStatus, setBookingAgendaStatus] = useState<ClinicAgendaStatus>(
     DEFAULT_CLINIC_APPOINTMENT_STATUS
   );
+  const [selectedClinicTreatmentItems, setSelectedClinicTreatmentItems] = useState<
+    ClinicTreatmentPlanSelectedItem[]
+  >([]);
 
   useEffect(() => {
     if (!isClinic || bookingProfessionalId) return;
@@ -1234,6 +1244,7 @@ export default function Agenda() {
     setBookingClinicProcedureId(procedureId);
     const proc = clinicAgendaProcedures.find((p) => p.id === procedureId);
     setBookingProcedureName(proc?.name ?? null);
+    setSelectedClinicTreatmentItems([]);
   }
   const [defineStatusOpen, setDefineStatusOpen] = useState(false);
   const [defineStatusCtx, setDefineStatusCtx] = useState<{
@@ -1732,18 +1743,19 @@ export default function Agenda() {
     setDialogPatientsLoading(true);
     supabase
       .from('patients')
-      .select('id, full_name, nickname, phone, is_active')
+      .select('id, full_name, nickname, phone, is_active, registration_completed_at')
       .eq('professional_id', professionalId)
       .eq('is_active', true)
       .order('full_name')
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         setDialogPatientsLoading(false);
         if (error) {
           console.error(error);
           toast.error('Erro ao carregar pacientes.');
           return;
         }
-        setDialogPatients((data || []) as unknown as Patient[]);
+        const filtered = await filterAgendaSelectablePatients((data || []) as Patient[]);
+        setDialogPatients(filtered);
       });
   }
 
@@ -1761,16 +1773,17 @@ export default function Agenda() {
     setPreRegistrationName('');
     setPreRegistrationPhone('');
     setNotes('');
+    setSelectedClinicTreatmentItems([]);
     setDialogPatients([]);
     setDialogPatientsLoading(true);
     toast.loading('Carregando pacientes...', { id: 'agenda-load-patients' });
     supabase
       .from('patients')
-      .select('id, full_name, nickname, phone, is_active')
+      .select('id, full_name, nickname, phone, is_active, registration_completed_at')
       .eq('professional_id', professionalId)
       .eq('is_active', true)
       .order('full_name')
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         setDialogPatientsLoading(false);
         toast.dismiss('agenda-load-patients');
         if (error) {
@@ -1778,7 +1791,8 @@ export default function Agenda() {
           toast.error('Erro ao carregar lista de pacientes.');
           return;
         }
-        setDialogPatients((data || []) as unknown as Patient[]);
+        const filtered = await filterAgendaSelectablePatients((data || []) as Patient[]);
+        setDialogPatients(filtered);
         setDialogOpen(true);
       });
   }
@@ -1825,6 +1839,7 @@ export default function Agenda() {
     setPreRegistrationName('');
     setPreRegistrationPhone('');
     setNotes('');
+    setSelectedClinicTreatmentItems([]);
     setDialogPatients([]);
     setDialogPatientsLoading(true);
     toast.loading('Carregando pacientes...', { id: 'agenda-load-patients' });
@@ -1836,34 +1851,37 @@ export default function Agenda() {
           if (isClinicMaster || isFrontDeskStaff) {
             const { data, error } = await supabase
               .from('patients')
-              .select('id, full_name, nickname, phone, is_active')
+              .select('id, full_name, nickname, phone, is_active, registration_completed_at')
               .eq('is_active', true)
               .order('full_name');
             if (error) throw error;
-            setDialogPatients((data || []) as unknown as Patient[]);
+            setDialogPatients(await filterAgendaSelectablePatients((data || []) as Patient[]));
           } else {
             const rows = await fetchPatients(professionalId);
             setDialogPatients(
-              rows
-                .filter((p) => p.is_active !== false)
-                .map((p) => ({
-                  id: p.id,
-                  full_name: p.full_name,
-                  nickname: p.nickname ?? null,
-                  phone: p.phone,
-                  is_active: p.is_active,
-                })) as unknown as Patient[]
+              await filterAgendaSelectablePatients(
+                rows
+                  .filter((p) => p.is_active !== false)
+                  .map((p) => ({
+                    id: p.id,
+                    full_name: p.full_name,
+                    nickname: p.nickname ?? null,
+                    phone: p.phone,
+                    is_active: p.is_active,
+                    registration_completed_at: p.registration_completed_at,
+                  }))
+              )
             );
           }
         } else {
           const { data, error } = await supabase
             .from('patients')
-            .select('id, full_name, nickname, phone, is_active')
+            .select('id, full_name, nickname, phone, is_active, registration_completed_at')
             .eq('professional_id', targetProfessionalId)
             .eq('is_active', true)
             .order('full_name');
           if (error) throw error;
-          setDialogPatients((data || []) as unknown as Patient[]);
+          setDialogPatients(await filterAgendaSelectablePatients((data || []) as Patient[]));
         }
         setDialogOpen(true);
       } catch (error) {
@@ -2184,6 +2202,7 @@ export default function Agenda() {
     setBookingSalonProcedureId(null);
     setBookingClinicProcedureId('');
     setBookingAgendaStatus(DEFAULT_CLINIC_APPOINTMENT_STATUS);
+    setSelectedClinicTreatmentItems([]);
     setSalonSlotAvailableProIds(null);
   }
 
@@ -2206,6 +2225,7 @@ export default function Agenda() {
     setClinicQuickRegisterName('');
     setBookingClinicProcedureId('');
     setBookingAgendaStatus(DEFAULT_CLINIC_APPOINTMENT_STATUS);
+    setSelectedClinicTreatmentItems([]);
     if (isClinic) {
       setBookingProfessionalId(null);
       setBookingProcedureName(null);
@@ -2292,6 +2312,9 @@ export default function Agenda() {
         if (clinicProc?.slug) {
           notesPayload = appendProcedureContextToNotes(notesPayload, clinicProc.slug);
         }
+      }
+      if (isClinic && bookingClinicProcedureId === 'tratamento' && selectedClinicTreatmentItems.length > 0) {
+        notesPayload = appendClinicTreatmentItemsToNotes(notesPayload, selectedClinicTreatmentItems);
       }
 
       // Pré-cadastro:
@@ -2723,6 +2746,9 @@ export default function Agenda() {
           notesPayload = appendProcedureContextToNotes(notesPayload, clinicProc.slug);
         }
       }
+      if (isClinic && bookingClinicProcedureId === 'tratamento' && selectedClinicTreatmentItems.length > 0) {
+        notesPayload = appendClinicTreatmentItemsToNotes(notesPayload, selectedClinicTreatmentItems);
+      }
 
       let linkedExistingPatientName: string | null = null;
       if (!hasPatient && hasPreName) {
@@ -3153,16 +3179,17 @@ export default function Agenda() {
     setPreRegistrationName('');
     setPreRegistrationPhone('');
     setNotes('');
+    setSelectedClinicTreatmentItems([]);
     setDialogPatients([]);
     setDialogPatientsLoading(true);
     toast.loading('Carregando pacientes...', { id: 'agenda-load-patients' });
     supabase
       .from('patients')
-      .select('id, full_name, nickname, phone, is_active')
+      .select('id, full_name, nickname, phone, is_active, registration_completed_at')
       .eq('professional_id', professionalId)
       .eq('is_active', true)
       .order('full_name')
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         setDialogPatientsLoading(false);
         toast.dismiss('agenda-load-patients');
         if (error) {
@@ -3170,7 +3197,7 @@ export default function Agenda() {
           toast.error('Erro ao carregar lista de pacientes.');
           return;
         }
-        setDialogPatients((data || []) as unknown as Patient[]);
+        setDialogPatients(await filterAgendaSelectablePatients((data || []) as Patient[]));
         setDialogOpen(true);
       });
   }
@@ -4074,6 +4101,7 @@ export default function Agenda() {
                             className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
                             onClick={() => {
                               setSelectedPatientId(p.id);
+                              setSelectedClinicTreatmentItems([]);
                               setPreRegistrationName('');
                               setPatientComboboxOpen(false);
                             }}
@@ -4098,6 +4126,14 @@ export default function Agenda() {
                 onProfessionalIdChange={setBookingProfessionalId}
                 agendaStatus={bookingAgendaStatus}
                 onAgendaStatusChange={setBookingAgendaStatus}
+              />
+            ) : null}
+            {isClinic && selectedPatientId && bookingClinicProcedureId === 'tratamento' ? (
+              <ClinicTreatmentPlanSelector
+                patientId={selectedPatientId}
+                enabled
+                selectedItemIds={selectedClinicTreatmentItems.map((item) => item.id)}
+                onSelectionChange={setSelectedClinicTreatmentItems}
               />
             ) : null}
             {!isClinic && (
@@ -5235,6 +5271,7 @@ export default function Agenda() {
                             className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
                             onClick={() => {
                               setSelectedPatientId(p.id);
+                              setSelectedClinicTreatmentItems([]);
                               setPreRegistrationName('');
                               setPatientComboboxOpen(false);
                             }}
@@ -5263,6 +5300,14 @@ export default function Agenda() {
                 }}
                 agendaStatus={bookingAgendaStatus}
                 onAgendaStatusChange={setBookingAgendaStatus}
+              />
+            ) : null}
+            {isClinic && selectedPatientId && bookingClinicProcedureId === 'tratamento' ? (
+              <ClinicTreatmentPlanSelector
+                patientId={selectedPatientId}
+                enabled
+                selectedItemIds={selectedClinicTreatmentItems.map((item) => item.id)}
+                onSelectionChange={setSelectedClinicTreatmentItems}
               />
             ) : null}
             {!isClinic && (

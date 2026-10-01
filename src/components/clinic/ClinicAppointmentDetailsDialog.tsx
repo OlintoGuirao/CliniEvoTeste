@@ -415,7 +415,10 @@ export function ClinicAppointmentDetailsDialog({
                         size="sm"
                         variant="outline"
                         className="gap-1.5"
-                        onClick={() => setDentalAttendancePopup(true)}
+                        onClick={() => {
+                          onOpenChange(false);
+                          navigate(`/patients/${selected.patient_id}/session/new`);
+                        }}
                       >
                         <Stethoscope className="h-3.5 w-3.5" />
                         Novo atendimento

@@ -1255,6 +1255,9 @@ export type Database = {
           full_name: string
           general_notes: string | null
           id: string
+          is_active: boolean
+          is_minor: boolean
+          legal_responsible_name: string | null
           neighborhood: string | null
           nickname: string | null
           phone: string | null
@@ -1284,6 +1287,9 @@ export type Database = {
           full_name: string
           general_notes?: string | null
           id?: string
+          is_active?: boolean
+          is_minor?: boolean
+          legal_responsible_name?: string | null
           neighborhood?: string | null
           nickname?: string | null
           phone?: string | null
@@ -1313,6 +1319,9 @@ export type Database = {
           full_name?: string
           general_notes?: string | null
           id?: string
+          is_active?: boolean
+          is_minor?: boolean
+          legal_responsible_name?: string | null
           neighborhood?: string | null
           nickname?: string | null
           phone?: string | null

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ import {
 import { useClinicPatientOrigins } from '@/hooks/use-clinic-patient-origins';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/api/queryKeys';
+import { isPatientMinor } from '@/lib/patientAge';
 
 const patientSchema = z.object({
   full_name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
@@ -90,8 +92,19 @@ export default function EditPatient() {
     general_notes: '',
     responsible_professional_id: '',
   });
+  const [isMinor, setIsMinor] = useState(false);
+  const [legalResponsibleName, setLegalResponsibleName] = useState('');
   const [lgpdSignatureData, setLgpdSignatureData] = useState<string | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+
+  const birthSuggestsMinor = isPatientMinor(formData.date_of_birth);
+
+  function handleBirthDateChange(date: Date | undefined) {
+    setFormData({ ...formData, date_of_birth: date });
+    if (date && isPatientMinor(date)) {
+      setIsMinor(true);
+    }
+  }
 
   useEffect(() => {
     if (id) fetchPatient();
@@ -141,6 +154,8 @@ export default function EditPatient() {
         general_notes: data.general_notes ?? '',
         responsible_professional_id: data.professional_id ?? '',
       });
+      setIsMinor(Boolean((data as { is_minor?: boolean }).is_minor));
+      setLegalResponsibleName((data as { legal_responsible_name?: string | null }).legal_responsible_name ?? '');
       setProfilePhotoUrl(data.profile_photo_url ?? null);
     } catch (err) {
       console.error('Error fetching patient:', err);
@@ -190,6 +205,11 @@ export default function EditPatient() {
       }
     }
 
+    if (isMinor && !legalResponsibleName.trim()) {
+      toast.error('Informe o nome do responsável legal para paciente menor de idade.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -215,6 +235,8 @@ export default function EditPatient() {
             emergency_contact_phone: null,
             general_notes: null,
             profile_photo_url: profilePhotoUrl,
+            is_minor: isMinor,
+            legal_responsible_name: isMinor ? legalResponsibleName.trim() || null : null,
           }
         : {
             full_name: formData.full_name,
@@ -252,6 +274,8 @@ export default function EditPatient() {
               : {}),
             general_notes: formData.general_notes || null,
             profile_photo_url: profilePhotoUrl,
+            is_minor: isMinor,
+            legal_responsible_name: isMinor ? legalResponsibleName.trim() || null : null,
           };
       if (isCompletingRegistration) {
         updatePayload.registration_completed_at = new Date().toISOString();
@@ -390,10 +414,15 @@ export default function EditPatient() {
                   <DateInputField
                     inputId="date_of_birth"
                     value={formData.date_of_birth}
-                    onChange={(date) => setFormData({ ...formData, date_of_birth: date })}
+                    onChange={handleBirthDateChange}
                     maxDate={new Date()}
                     fromYear={1920}
                   />
+                  {birthSuggestsMinor ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      A data de nascimento indica paciente menor de idade.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -412,6 +441,38 @@ export default function EditPatient() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <Checkbox
+                    id="is_minor_salon"
+                    checked={isMinor}
+                    onCheckedChange={(checked) => {
+                      const next = checked === true;
+                      setIsMinor(next);
+                      if (!next) setLegalResponsibleName('');
+                    }}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="is_minor_salon" className="cursor-pointer font-medium leading-none">
+                      Paciente menor de idade
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Marque para registrar o responsável legal do menor.
+                    </p>
+                  </div>
+                </div>
+                {isMinor ? (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="legal_responsible_name_salon">Nome do responsável legal *</Label>
+                    <Input
+                      id="legal_responsible_name_salon"
+                      value={legalResponsibleName}
+                      onChange={(e) => setLegalResponsibleName(e.target.value)}
+                      placeholder="Nome completo do responsável"
+                      required
+                    />
+                  </div>
+                ) : null}
 
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="phone">Telefone / WhatsApp *</Label>
@@ -470,10 +531,15 @@ export default function EditPatient() {
               <DateInputField
                 inputId="date_of_birth"
                 value={formData.date_of_birth}
-                onChange={(date) => setFormData({ ...formData, date_of_birth: date })}
+                onChange={handleBirthDateChange}
                 maxDate={new Date()}
                 fromYear={1920}
               />
+              {birthSuggestsMinor ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  A data de nascimento indica paciente menor de idade.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">
@@ -492,6 +558,38 @@ export default function EditPatient() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <Checkbox
+                id="is_minor"
+                checked={isMinor}
+                onCheckedChange={(checked) => {
+                  const next = checked === true;
+                  setIsMinor(next);
+                  if (!next) setLegalResponsibleName('');
+                }}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="is_minor" className="cursor-pointer font-medium leading-none">
+                  Paciente menor de idade
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque para registrar o responsável legal do menor.
+                </p>
+              </div>
+            </div>
+            {isMinor ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="legal_responsible_name">Nome do responsável legal *</Label>
+                <Input
+                  id="legal_responsible_name"
+                  value={legalResponsibleName}
+                  onChange={(e) => setLegalResponsibleName(e.target.value)}
+                  placeholder="Nome completo do responsável"
+                  required
+                />
+              </div>
+            ) : null}
 
             {isClinicAccount ? (
               <div className="space-y-2 sm:col-span-2">

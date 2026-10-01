@@ -26,6 +26,8 @@ export type CreatePatientPayload = {
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   general_notes?: string | null;
+  is_minor?: boolean;
+  legal_responsible_name?: string | null;
   registration_completed_at: string;
 };
 
@@ -60,6 +62,10 @@ export function useCreatePatient(professionalId: string | undefined) {
             emergency_contact_name: payload.emergency_contact_name?.trim() || null,
             emergency_contact_phone: payload.emergency_contact_phone?.trim() || null,
             general_notes: payload.general_notes?.trim() || null,
+            is_minor: Boolean(payload.is_minor),
+            legal_responsible_name: payload.is_minor
+              ? payload.legal_responsible_name?.trim() || null
+              : null,
             registration_completed_at: payload.registration_completed_at,
             is_active: true,
           },
@@ -90,6 +96,10 @@ export function useCreatePatient(professionalId: string | undefined) {
         profile_photo_url: null,
         treatment_start_date: newPatient.treatment_start_date ?? null,
         is_active: true,
+        is_minor: Boolean(newPatient.is_minor),
+        legal_responsible_name: newPatient.is_minor
+          ? newPatient.legal_responsible_name?.trim() || null
+          : null,
         created_at: new Date().toISOString(),
         registration_completed_at: newPatient.registration_completed_at,
         professional_id: assignedId,
