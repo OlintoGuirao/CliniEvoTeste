@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PageLoading } from '@/components/layout/PageLoading';
 import { ArrowLeft, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { isClinicOnlyAccount } from '@/lib/accountType';
 
 interface Procedure {
   id: string;
@@ -34,6 +35,7 @@ export default function NewPatientSessionPage() {
   const { id: patientId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const isClinicAccount = isClinicOnlyAccount(profile?.account_type);
   const [patientName, setPatientName] = useState('');
   const [sessionDate, setSessionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [observacoes, setObservacoes] = useState('');
@@ -50,6 +52,12 @@ export default function NewPatientSessionPage() {
       setPatientName((p as { full_name: string } | null)?.full_name ?? '');
 
       const procs = (await getProceduresForProfile(profile.id)) as Procedure[];
+
+      if (!isClinicAccount) {
+        setFilteredFromPlans(false);
+        setProcedures(procs);
+        return;
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const db = supabase as any;
@@ -101,7 +109,7 @@ export default function NewPatientSessionPage() {
         setFilteredFromPlans(false);
       }
     })().finally(() => setLoading(false));
-  }, [patientId, profile?.id]);
+  }, [patientId, profile?.id, isClinicAccount]);
 
   const toggleProcedure = (procedureId: string) => {
     setSelectedProcedureIds((prev) => {

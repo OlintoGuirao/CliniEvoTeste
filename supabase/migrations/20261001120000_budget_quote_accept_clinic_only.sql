@@ -1,6 +1,5 @@
--- Ao aceitar orçamento (budget_quotes.status = accepted) em conta clínica,
--- atualiza agendamentos futuros do paciente para clinic_status = 'payment'.
--- Não aplica a profissional único (solo) nem salão.
+-- Garante que o aceite de orçamento só altera clinic_status em contas clinic.
+-- Idempotente: seguro mesmo se 20260928101000 já tiver a lógica correta.
 
 CREATE OR REPLACE FUNCTION public.budget_quote_accept_updates_appointments()
 RETURNS trigger
@@ -44,12 +43,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
-DROP TRIGGER IF EXISTS budget_quote_accept_updates_appointments ON public.budget_quotes;
-CREATE TRIGGER budget_quote_accept_updates_appointments
-  AFTER UPDATE OF status ON public.budget_quotes
-  FOR EACH ROW
-  EXECUTE FUNCTION public.budget_quote_accept_updates_appointments();
 
 COMMENT ON FUNCTION public.budget_quote_accept_updates_appointments() IS
   'Somente clínica: quando o orçamento muda para accepted, define clinic_status=payment nos agendamentos futuros do paciente (exceto finalizados/cancelados/faltas).';

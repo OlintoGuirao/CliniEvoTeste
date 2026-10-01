@@ -154,7 +154,7 @@ export default function NewPatient() {
 
   function handleBirthDateChange(date: Date | undefined) {
     setFormData({ ...formData, date_of_birth: date });
-    if (date && isPatientMinor(date)) {
+    if (isClinicAccount && date && isPatientMinor(date)) {
       setIsMinor(true);
     }
   }
@@ -204,7 +204,7 @@ export default function NewPatient() {
       }
     }
 
-    if (isMinor && !legalResponsibleName.trim()) {
+    if (isClinicAccount && isMinor && !legalResponsibleName.trim()) {
       toast.error('Informe o nome do responsável legal para paciente menor de idade.');
       return;
     }
@@ -247,8 +247,9 @@ export default function NewPatient() {
         emergency_contact_phone:
           copy.isSalon || isClinicAccount ? null : formData.emergency_contact_phone.trim() || null,
         general_notes: copy.isSalon ? null : formData.general_notes.trim() || null,
-        is_minor: isMinor,
-        legal_responsible_name: isMinor ? legalResponsibleName.trim() || null : null,
+        is_minor: isClinicAccount ? isMinor : false,
+        legal_responsible_name:
+          isClinicAccount && isMinor ? legalResponsibleName.trim() || null : null,
         registration_completed_at: new Date().toISOString(),
       });
 
@@ -408,11 +409,6 @@ export default function NewPatient() {
                     maxDate={new Date()}
                     fromYear={1920}
                   />
-                  {birthSuggestsMinor ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      A data de nascimento indica paciente menor de idade.
-                    </p>
-                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -431,38 +427,6 @@ export default function NewPatient() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
-                  <Checkbox
-                    id="is_minor_salon"
-                    checked={isMinor}
-                    onCheckedChange={(checked) => {
-                      const next = checked === true;
-                      setIsMinor(next);
-                      if (!next) setLegalResponsibleName('');
-                    }}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="is_minor_salon" className="cursor-pointer font-medium leading-none">
-                      Paciente menor de idade
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Marque para registrar o responsável legal do menor.
-                    </p>
-                  </div>
-                </div>
-                {isMinor ? (
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="legal_responsible_name_salon">Nome do responsável legal *</Label>
-                    <Input
-                      id="legal_responsible_name_salon"
-                      value={legalResponsibleName}
-                      onChange={(e) => setLegalResponsibleName(e.target.value)}
-                      placeholder="Nome completo do responsável"
-                      required
-                    />
-                  </div>
-                ) : null}
 
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="phone">Telefone / WhatsApp *</Label>
@@ -546,7 +510,7 @@ export default function NewPatient() {
                 maxDate={new Date()}
                 fromYear={1920}
               />
-              {birthSuggestsMinor ? (
+              {isClinicAccount && birthSuggestsMinor ? (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   A data de nascimento indica paciente menor de idade.
                 </p>
@@ -570,36 +534,40 @@ export default function NewPatient() {
               </Select>
             </div>
 
-            <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <Checkbox
-                id="is_minor"
-                checked={isMinor}
-                onCheckedChange={(checked) => {
-                  const next = checked === true;
-                  setIsMinor(next);
-                  if (!next) setLegalResponsibleName('');
-                }}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="is_minor" className="cursor-pointer font-medium leading-none">
-                  Paciente menor de idade
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Marque para registrar o responsável legal do menor.
-                </p>
-              </div>
-            </div>
-            {isMinor ? (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="legal_responsible_name">Nome do responsável legal *</Label>
-                <Input
-                  id="legal_responsible_name"
-                  value={legalResponsibleName}
-                  onChange={(e) => setLegalResponsibleName(e.target.value)}
-                  placeholder="Nome completo do responsável"
-                  required
-                />
-              </div>
+            {isClinicAccount ? (
+              <>
+                <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <Checkbox
+                    id="is_minor"
+                    checked={isMinor}
+                    onCheckedChange={(checked) => {
+                      const next = checked === true;
+                      setIsMinor(next);
+                      if (!next) setLegalResponsibleName('');
+                    }}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="is_minor" className="cursor-pointer font-medium leading-none">
+                      Paciente menor de idade
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Marque para registrar o responsável legal do menor.
+                    </p>
+                  </div>
+                </div>
+                {isMinor ? (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="legal_responsible_name">Nome do responsável legal *</Label>
+                    <Input
+                      id="legal_responsible_name"
+                      value={legalResponsibleName}
+                      onChange={(e) => setLegalResponsibleName(e.target.value)}
+                      placeholder="Nome completo do responsável"
+                      required
+                    />
+                  </div>
+                ) : null}
+              </>
             ) : null}
 
             {isClinicAccount ? (
