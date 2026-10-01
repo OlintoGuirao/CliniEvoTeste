@@ -20,8 +20,11 @@ export function useChartMobileBehavior() {
   const chartDotRadius = isMobile ? 12 : 4;
   const tooltipTrigger: 'click' | 'hover' = isMobile ? 'click' : 'hover';
 
-  const renderChartDot = (props: ChartDotProps) => {
-    const { cx = 0, cy = 0 } = props;
+  const renderChartDot = (props?: ChartDotProps) => {
+    const { cx = 0, cy = 0 } = props ?? {};
+    if (typeof cx !== 'number' || typeof cy !== 'number' || Number.isNaN(cx) || Number.isNaN(cy)) {
+      return null;
+    }
     return (
       <g style={isMobile ? { pointerEvents: 'none' } : undefined}>
         <circle

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getProceduresForProfile } from '@/lib/proceduresForProfile';
@@ -10,9 +10,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PageLoading } from '@/components/layout/PageLoading';
+import { ClinicAuthorizedProcedureCards } from '@/components/clinic/ClinicAuthorizedProcedureCards';
 import { ArrowLeft, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { isClinicOnlyAccount } from '@/lib/accountType';
+import {
+  listClinicAuthorizedProceduresForPatient,
+  type ClinicAuthorizedProcedureCard,
+} from '@/services/api/clinicAuthorizedProceduresApi';
+import { findOpenClinicProcedureSession } from '@/services/api/clinicProcedureSessionsApi';
 
 interface Procedure {
   id: string;
@@ -20,22 +26,15 @@ interface Procedure {
   slug: string;
 }
 
-function normalizeProcedureName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
-const SOLD_PLAN_STATUSES = ['authorized', 'negotiating'] as const;
-
 export default function NewPatientSessionPage() {
   const { id: patientId } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
   const isClinicAccount = isClinicOnlyAccount(profile?.account_type);
+  const appointmentId = searchParams.get('appointmentId');
+  const returnTo = searchParams.get('returnTo') || (appointmentId ? '/agenda' : `/patients/${patientId}`);
+
   const [patientName, setPatientName] = useState('');
   const [sessionDate, setSessionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [observacoes, setObservacoes] = useState('');
@@ -43,7 +42,9 @@ export default function NewPatientSessionPage() {
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [filteredFromPlans, setFilteredFromPlans] = useState(false);
+  const [clinicCards, setClinicCards] = useState<ClinicAuthorizedProcedureCard[]>([]);
+  const [professionalNames, setProfessionalNames] = useState<Record<string, string>>({});
+  const [selectingPlanItemId, setSelectingPlanItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!patientId || !profile?.id) return;
@@ -51,64 +52,35 @@ export default function NewPatientSessionPage() {
       const { data: p } = await supabase.from('patients').select('full_name').eq('id', patientId).single();
       setPatientName((p as { full_name: string } | null)?.full_name ?? '');
 
+      if (isClinicAccount) {
+        try {
+          const cards = await listClinicAuthorizedProceduresForPatient(patientId);
+          setClinicCards(cards);
+          const ids = [...new Set(cards.map((c) => c.responsibleProfessionalId).filter(Boolean))];
+          if (ids.length) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, full_name')
+              .in('id', ids);
+            const map: Record<string, string> = {};
+            for (const row of (profiles ?? []) as Array<{ id: string; full_name: string | null }>) {
+              map[row.id] = row.full_name?.trim() || 'Profissional';
+            }
+            setProfessionalNames(map);
+          }
+        } catch (e) {
+          console.error(e);
+          toast.error('Não foi possível carregar os procedimentos autorizados.');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       const procs = (await getProceduresForProfile(profile.id)) as Procedure[];
-
-      if (!isClinicAccount) {
-        setFilteredFromPlans(false);
-        setProcedures(procs);
-        return;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = supabase as any;
-      const { data: plans } = await db
-        .from('dental_treatment_plans')
-        .select('id')
-        .eq('patient_id', patientId)
-        .in('status', [...SOLD_PLAN_STATUSES]);
-
-      const planIds = ((plans ?? []) as Array<{ id: string }>).map((row) => String(row.id));
-      const { data: items } = planIds.length
-        ? await db
-            .from('dental_plan_items')
-            .select('procedure_id, procedure_name')
-            .in('treatment_plan_id', planIds)
-            .neq('status', 'rejected')
-        : { data: [] };
-
-      const planItems = (items ?? []) as Array<{
-        procedure_id?: string | null;
-        procedure_name?: string | null;
-      }>;
-
-      if (planItems.length === 0) {
-        setFilteredFromPlans(false);
-        setProcedures(procs);
-        return;
-      }
-
-      const byId = new Set(
-        planItems
-          .map((row) => (row.procedure_id ? String(row.procedure_id) : ''))
-          .filter(Boolean)
-      );
-      const byName = new Set(
-        planItems
-          .map((row) => normalizeProcedureName(String(row.procedure_name ?? '')))
-          .filter(Boolean)
-      );
-
-      const filtered = procs.filter((proc) => {
-        if (byId.has(proc.id)) return true;
-        return byName.has(normalizeProcedureName(proc.name));
-      });
-
-      setFilteredFromPlans(true);
-      setProcedures(filtered.length > 0 ? filtered : procs);
-      if (filtered.length === 0) {
-        setFilteredFromPlans(false);
-      }
-    })().finally(() => setLoading(false));
+      setProcedures(procs);
+      setLoading(false);
+    })();
   }, [patientId, profile?.id, isClinicAccount]);
 
   const toggleProcedure = (procedureId: string) => {
@@ -118,6 +90,40 @@ export default function NewPatientSessionPage() {
       else next.add(procedureId);
       return next;
     });
+  };
+
+  const openClinicAttendance = async (card: ClinicAuthorizedProcedureCard) => {
+    if (!patientId) return;
+    if (card.uiStatus === 'finished' || card.uiStatus === 'cancelled') {
+      toast.error('Este procedimento não está disponível para novo atendimento.');
+      return;
+    }
+    setSelectingPlanItemId(card.planItemId);
+    try {
+      const open = card.openSessionId
+        ? { id: card.openSessionId }
+        : await findOpenClinicProcedureSession({
+            patientId,
+            planItemId: card.planItemId,
+          });
+
+      const qs = new URLSearchParams();
+      if (appointmentId) qs.set('appointmentId', appointmentId);
+      if (returnTo) qs.set('returnTo', returnTo);
+
+      if (open?.id) {
+        navigate(`/patients/${patientId}/clinic-attendance/${open.id}?${qs.toString()}`);
+        return;
+      }
+
+      qs.set('planItemId', card.planItemId);
+      navigate(`/patients/${patientId}/clinic-attendance/new?${qs.toString()}`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível abrir o atendimento.');
+    } finally {
+      setSelectingPlanItemId(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -192,20 +198,52 @@ export default function NewPatientSessionPage() {
     return <PageLoading />;
   }
 
+  if (isClinicAccount) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-5 animate-fade-in">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild className="shrink-0">
+            <Link to={returnTo}>
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Novo atendimento
+            </p>
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {patientName || 'Paciente'}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Selecione um procedimento autorizado/vendido no plano de tratamento.
+            </p>
+          </div>
+        </div>
+
+        <ClinicAuthorizedProcedureCards
+          cards={clinicCards}
+          professionalNameById={professionalNames}
+          onSelect={(card) => void openClinicAttendance(card)}
+          selectingPlanItemId={selectingPlanItemId}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5 animate-fade-in max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl space-y-5 animate-fade-in">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild className="shrink-0">
           <Link to={`/patients/${patientId}`}>
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nova sessão</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
             {patientName || 'Paciente'}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-1 text-sm text-muted-foreground">
             Marque os procedimentos realizados nesta sessão.
           </p>
         </div>
@@ -213,14 +251,14 @@ export default function NewPatientSessionPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
         <Card>
-          <CardHeader className="pb-2 md:pb-3 p-3 md:p-6">
-            <CardTitle className="flex items-center gap-2 text-sm md:text-base font-semibold">
-              <Calendar className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold md:text-base">
+              <Calendar className="h-4 w-4 text-primary md:h-5 md:w-5" />
               Data e observações
             </CardTitle>
             <CardDescription className="text-xs">Data da sessão e anotações gerais.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 md:space-y-4 p-3 md:p-6 pt-0">
+          <CardContent className="space-y-3 p-3 pt-0 md:space-y-4 md:p-6">
             <div className="space-y-2">
               <Label>Data da sessão</Label>
               <Input
@@ -243,23 +281,23 @@ export default function NewPatientSessionPage() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-2 md:pb-3 p-3 md:p-6">
-            <CardTitle className="text-sm md:text-base font-semibold">Procedimentos realizados</CardTitle>
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-3">
+            <CardTitle className="text-sm font-semibold md:text-base">Procedimentos realizados</CardTitle>
             <CardDescription className="text-xs">
-              {filteredFromPlans
-                ? 'Exibindo apenas procedimentos dos planos aceitos/vendidos do paciente.'
-                : 'Marque os procedimentos feitos nesta sessão.'}
+              Marque os procedimentos feitos nesta sessão.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-0">
+          <CardContent className="p-3 pt-0 md:p-6">
             {procedures.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum procedimento ativo. Configure em Configurações.</p>
+              <p className="text-sm text-muted-foreground">
+                Nenhum procedimento ativo. Configure em Configurações.
+              </p>
             ) : (
               <ul className="space-y-3">
                 {procedures.map((proc) => (
                   <li
                     key={proc.id}
-                    className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors"
+                    className="flex items-center space-x-3 rounded-lg border p-3 transition-colors hover:bg-muted/30"
                   >
                     <Checkbox
                       id={proc.id}
@@ -276,12 +314,16 @@ export default function NewPatientSessionPage() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
             <Link to={`/patients/${patientId}`}>Cancelar</Link>
           </Button>
-          <Button type="submit" disabled={saving || selectedProcedureIds.size === 0} className="gap-2 w-full sm:w-auto">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          <Button
+            type="submit"
+            disabled={saving || selectedProcedureIds.size === 0}
+            className="w-full gap-2 sm:w-auto"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {saving ? 'Salvando...' : 'Registrar sessão'}
           </Button>
         </div>

@@ -56,7 +56,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClinicAppointmentStatusSelect } from '@/components/clinic/ClinicAppointmentStatusSelect';
 import { ClinicPatientProfileDialog } from '@/components/clinic/ClinicPatientProfileDialog';
-import { ClinicDentalAttendanceDialog } from '@/components/clinic/ClinicDentalAttendanceDialog';
+import {
+  listClinicProcedureSessionsForPatient,
+  type ClinicProcedureSessionRow,
+} from '@/services/api/clinicProcedureSessionsApi';
+import { clinicProcedureSessionStatusLabel } from '@/lib/clinicAuthorizedProcedures';
+import { listClinicAuthorizedProceduresForPatient } from '@/services/api/clinicAuthorizedProceduresApi';
 
 export type ClinicOccupiedAppointment = {
   id: string;
@@ -151,13 +156,15 @@ export function ClinicAppointmentDetailsDialog({
   const [extras, setExtras] = useState<AppointmentExtras | null>(null);
   const [lastVisit, setLastVisit] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [attendanceHistory, setAttendanceHistory] = useState<
+    Array<ClinicProcedureSessionRow & { procedureName?: string }>
+  >([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [openingWhatsapp, setOpeningWhatsapp] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState('detalhes');
   const [profilePopup, setProfilePopup] = useState(false);
-  const [dentalAttendancePopup, setDentalAttendancePopup] = useState(false);
 
   const selected = useMemo(() => {
     if (appointments.length === 0) return null;
@@ -177,7 +184,6 @@ export function ClinicAppointmentDetailsDialog({
     setTab('detalhes');
     setConfirmDelete(false);
     setProfilePopup(false);
-    setDentalAttendancePopup(false);
   }, [open]);
 
   useEffect(() => {
@@ -186,6 +192,7 @@ export function ClinicAppointmentDetailsDialog({
       setExtras(null);
       setLastVisit(null);
       setHistory([]);
+      setAttendanceHistory([]);
       return;
     }
 
@@ -230,17 +237,32 @@ export function ClinicAppointmentDetailsDialog({
 
         if (patientId && professionalIds.length > 0) {
           const currentStamp = `${appointmentDate}T${startTime}`;
-          const { data: hist } = await supabase
-            .from('appointments')
-            .select('id, appointment_date, start_time, notes, professional_id')
-            .eq('patient_id', patientId)
-            .in('professional_id', professionalIds)
-            .order('appointment_date', { ascending: false })
-            .order('start_time', { ascending: false })
-            .limit(20);
+          const [{ data: hist }, sessions, authorized] = await Promise.all([
+            supabase
+              .from('appointments')
+              .select('id, appointment_date, start_time, notes, professional_id')
+              .eq('patient_id', patientId)
+              .in('professional_id', professionalIds)
+              .order('appointment_date', { ascending: false })
+              .order('start_time', { ascending: false })
+              .limit(20),
+            listClinicProcedureSessionsForPatient(patientId).catch(() => []),
+            listClinicAuthorizedProceduresForPatient(patientId).catch(() => []),
+          ]);
           if (cancelled) return;
           const items = ((hist ?? []) as HistoryItem[]).filter((item) => item.id !== aptId);
           setHistory(items);
+          const procedureNameByItem = new Map(
+            authorized.map((card) => [card.planItemId, card.procedureName] as const)
+          );
+          setAttendanceHistory(
+            sessions.map((session) => ({
+              ...session,
+              procedureName: session.plan_item_id
+                ? procedureNameByItem.get(session.plan_item_id)
+                : undefined,
+            }))
+          );
           const previous = items.find(
             (item) => `${item.appointment_date}T${item.start_time}` < currentStamp
           );
@@ -251,6 +273,7 @@ export function ClinicAppointmentDetailsDialog({
           );
         } else {
           setHistory([]);
+          setAttendanceHistory([]);
           setLastVisit(null);
         }
       } catch (error) {
@@ -417,7 +440,11 @@ export function ClinicAppointmentDetailsDialog({
                         className="gap-1.5"
                         onClick={() => {
                           onOpenChange(false);
-                          navigate(`/patients/${selected.patient_id}/session/new`);
+                          const qs = new URLSearchParams({
+                            appointmentId: selected.id,
+                            returnTo: '/agenda',
+                          });
+                          navigate(`/patients/${selected.patient_id}/session/new?${qs.toString()}`);
                         }}
                       >
                         <Stethoscope className="h-3.5 w-3.5" />
@@ -561,7 +588,7 @@ export function ClinicAppointmentDetailsDialog({
                     {children}
                   </TabsContent>
 
-                  <TabsContent value="historico" className="mt-4">
+                  <TabsContent value="historico" className="mt-4 space-y-5">
                     {!selected.patient_id ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">
                         Histórico disponível após o cadastro completo do paciente.
@@ -571,30 +598,82 @@ export function ClinicAppointmentDetailsDialog({
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Carregando…
                       </div>
-                    ) : history.length === 0 ? (
-                      <p className="py-8 text-center text-sm text-muted-foreground">
-                        Nenhum outro agendamento deste paciente na clínica.
-                      </p>
                     ) : (
-                      <ul className="space-y-2">
-                        {history.map((item) => (
-                          <li
-                            key={item.id}
-                            className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm"
-                          >
-                            <p className="font-medium">
-                              {format(parseISO(item.appointment_date), "EEEE, d 'de' MMMM", { locale: ptBR })}{' '}
-                              às {item.start_time.slice(0, 5)}
+                      <>
+                        <section className="space-y-2">
+                          <h4 className="text-sm font-semibold">Atendimentos de procedimentos</h4>
+                          {attendanceHistory.length === 0 ? (
+                            <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                              Nenhum atendimento clínico registrado. Use &quot;Novo atendimento&quot;.
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {professionalName(professionals, item.professional_id)}
-                              {clinicProcedureLabelFromNotes(item.notes)
-                                ? ` · ${clinicProcedureLabelFromNotes(item.notes)}`
-                                : ''}
+                          ) : (
+                            <ul className="space-y-2">
+                              {attendanceHistory.map((item) => (
+                                <li key={item.id}>
+                                  <button
+                                    type="button"
+                                    className="w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-left text-sm hover:bg-muted/40"
+                                    onClick={() => {
+                                      onOpenChange(false);
+                                      navigate(
+                                        `/patients/${selected.patient_id}/clinic-attendance/${item.id}?returnTo=${encodeURIComponent('/agenda')}`
+                                      );
+                                    }}
+                                  >
+                                    <p className="font-medium">
+                                      {item.procedureName || 'Procedimento'} ·{' '}
+                                      {clinicProcedureSessionStatusLabel(item.status)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(
+                                        parseISO(item.finished_at ?? item.updated_at ?? item.created_at),
+                                        "dd/MM/yyyy 'às' HH:mm",
+                                        { locale: ptBR }
+                                      )}
+                                    </p>
+                                    {item.observations ? (
+                                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                        {item.observations}
+                                      </p>
+                                    ) : null}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </section>
+
+                        <section className="space-y-2">
+                          <h4 className="text-sm font-semibold">Agendamentos na clínica</h4>
+                          {history.length === 0 ? (
+                            <p className="py-4 text-center text-sm text-muted-foreground">
+                              Nenhum outro agendamento deste paciente na clínica.
                             </p>
-                          </li>
-                        ))}
-                      </ul>
+                          ) : (
+                            <ul className="space-y-2">
+                              {history.map((item) => (
+                                <li
+                                  key={item.id}
+                                  className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm"
+                                >
+                                  <p className="font-medium">
+                                    {format(parseISO(item.appointment_date), "EEEE, d 'de' MMMM", {
+                                      locale: ptBR,
+                                    })}{' '}
+                                    às {item.start_time.slice(0, 5)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {professionalName(professionals, item.professional_id)}
+                                    {clinicProcedureLabelFromNotes(item.notes)
+                                      ? ` · ${clinicProcedureLabelFromNotes(item.notes)}`
+                                      : ''}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </section>
+                      </>
                     )}
                   </TabsContent>
                 </Tabs>
@@ -662,12 +741,6 @@ export function ClinicAppointmentDetailsDialog({
         }}
       />
 
-      <ClinicDentalAttendanceDialog
-        open={dentalAttendancePopup && Boolean(selected?.patient_id)}
-        onOpenChange={setDentalAttendancePopup}
-        patientId={selected?.patient_id ?? null}
-        patientName={patientName}
-      />
     </>
   );
 }

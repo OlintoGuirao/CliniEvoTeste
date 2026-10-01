@@ -48,6 +48,7 @@ const ProcedureStartPage = lazy(() => import('@/pages/ProcedureStartPage'));
 const ProcedureInstanceDetailPage = lazy(() => import('@/pages/ProcedureInstanceDetailPage'));
 const EmagrecimentoRelatorioPage = lazy(() => import('@/pages/EmagrecimentoRelatorioPage'));
 const NewPatientSessionPage = lazy(() => import('@/pages/NewPatientSessionPage'));
+const ClinicProcedureAttendancePage = lazy(() => import('@/pages/ClinicProcedureAttendancePage'));
 const PatientAnamnesePage = lazy(() => import('@/pages/PatientAnamnesePage'));
 const PatientExamsPage = lazy(() => import('@/pages/PatientExamsPage'));
 const PatientPrescriptionsPage = lazy(() => import('@/pages/PatientPrescriptionsPage'));
@@ -200,6 +201,8 @@ const routes: RouteObject[] = [
               { path: 'patients/:id/edit', element: <EditPatient /> },
               { path: 'patients/:id', element: <PatientDetail /> },
               { path: 'patients/:id/session/new', element: <NewPatientSessionPage /> },
+              { path: 'patients/:id/clinic-attendance/new', element: <ClinicProcedureAttendancePage /> },
+              { path: 'patients/:id/clinic-attendance/:sessionId', element: <ClinicProcedureAttendancePage /> },
               { path: 'patients/:id/anamnese', element: <PatientAnamnesePage /> },
               { path: 'patients/:id/exams', element: <PatientExamsPage /> },
               { path: 'patients/:id/prescriptions', element: <PatientPrescriptionsPage /> },

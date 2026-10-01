@@ -483,7 +483,7 @@ export function ClinicMasterDashboard() {
                   <XAxis type="number" tickFormatter={(v) => formatFluxoCurrency(Number(v))} />
                   <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
                   <ChartTooltip
-                    {...tooltipTrigger}
+                    trigger={tooltipTrigger}
                     content={
                       <ChartTooltipContent formatter={(v) => formatFluxoCurrency(Number(v))} />
                     }
@@ -514,7 +514,7 @@ export function ClinicMasterDashboard() {
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => formatFluxoCurrency(Number(v))} width={72} />
                   <ChartTooltip
-                    {...tooltipTrigger}
+                    trigger={tooltipTrigger}
                     content={
                       <ChartTooltipContent formatter={(v) => formatFluxoCurrency(Number(v))} />
                     }
@@ -524,7 +524,7 @@ export function ClinicMasterDashboard() {
                     dataKey="value"
                     stroke="var(--color-vendas)"
                     strokeWidth={2}
-                    dot={renderChartDot()}
+                    dot={renderChartDot}
                   />
                 </LineChart>
               </ChartContainer>
@@ -551,7 +551,7 @@ export function ClinicMasterDashboard() {
                       <Cell key={i} fill={FLUXO_PIE_PALETTE[i % FLUXO_PIE_PALETTE.length]} />
                     ))}
                   </Pie>
-                  <ChartTooltip {...tooltipTrigger} content={<ChartTooltipContent />} />
+                  <ChartTooltip trigger={tooltipTrigger} content={<ChartTooltipContent />} />
                 </PieChart>
               </ChartContainer>
               <ul className="space-y-2 text-sm">
