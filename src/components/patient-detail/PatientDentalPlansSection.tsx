@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -256,6 +256,37 @@ function formatItemTableLocation(
 
 function parseMoneyInput(raw: string): number {
   return Number(String(raw).replace(',', '.')) || 0;
+}
+
+/** Acima de Nova avaliação (z-1600) e ficha do paciente (z-1700). */
+const NESTED_DIALOG_Z = 'z-[1800]';
+
+function NestedDialogContent({
+  className,
+  overlayClassName,
+  ...props
+}: ComponentProps<typeof DialogContent>) {
+  return (
+    <DialogContent
+      className={cn(NESTED_DIALOG_Z, className)}
+      overlayClassName={cn(NESTED_DIALOG_Z, overlayClassName)}
+      {...props}
+    />
+  );
+}
+
+function NestedAlertDialogContent({
+  className,
+  overlayClassName,
+  ...props
+}: ComponentProps<typeof AlertDialogContent>) {
+  return (
+    <AlertDialogContent
+      className={cn(NESTED_DIALOG_Z, className)}
+      overlayClassName={cn(NESTED_DIALOG_Z, overlayClassName)}
+      {...props}
+    />
+  );
 }
 
 function itemLocationsAsSelection(
@@ -2294,7 +2325,7 @@ export function PatientDentalPlansSection({
 
           {!isPlanEditLocked ? (
           <Dialog open={selectionMenuOpen} onOpenChange={setSelectionMenuOpen}>
-            <DialogContent
+            <NestedDialogContent
               className={cn(
                 'flex max-h-[min(90dvh,720px)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0',
                 'sm:max-w-md sm:rounded-xl'
@@ -2375,7 +2406,7 @@ export function PatientDentalPlansSection({
                   onClearSelection={clearSelection}
                 />
               </div>
-            </DialogContent>
+            </NestedDialogContent>
           </Dialog>
           ) : null}
         </PatientTabPanelSection>
@@ -2658,7 +2689,7 @@ export function PatientDentalPlansSection({
 
         {/* Condition dialog */}
         <Dialog open={conditionOpen} onOpenChange={setConditionOpen}>
-          <DialogContent className="sm:max-w-md">
+          <NestedDialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Atualizar situação do dente</DialogTitle>
               <DialogDescription>
@@ -2721,11 +2752,11 @@ export function PatientDentalPlansSection({
                 Salvar
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <NestedDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Histórico do(s) dente(s)</DialogTitle>
               <DialogDescription>
@@ -2796,12 +2827,12 @@ export function PatientDentalPlansSection({
                 Fechar
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         {/* Procedure dialog */}
         <Dialog open={procedureOpen} onOpenChange={setProcedureOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <NestedDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Adicionar procedimento</DialogTitle>
               <DialogDescription>
@@ -3222,7 +3253,7 @@ export function PatientDentalPlansSection({
                 Salvar
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         {/* Duplicate item — alterar só a localização */}
@@ -3236,7 +3267,7 @@ export function PatientDentalPlansSection({
             }
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <NestedDialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Duplicar procedimento</DialogTitle>
               <DialogDescription>
@@ -3343,7 +3374,7 @@ export function PatientDentalPlansSection({
                 Duplicar
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <AlertDialog
@@ -3355,7 +3386,7 @@ export function PatientDentalPlansSection({
             }
           }}
         >
-          <AlertDialogContent>
+          <NestedAlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Procedimento já existe nesta localização</AlertDialogTitle>
               <AlertDialogDescription>
@@ -3383,7 +3414,7 @@ export function PatientDentalPlansSection({
                 Criar outro item
               </AlertDialogAction>
             </AlertDialogFooter>
-          </AlertDialogContent>
+          </NestedAlertDialogContent>
         </AlertDialog>
 
         <Dialog
@@ -3392,7 +3423,7 @@ export function PatientDentalPlansSection({
             if (!open && !busy) setPriceAdjustItem(null);
           }}
         >
-          <DialogContent className="sm:max-w-sm">
+          <NestedDialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Ajustar valor</DialogTitle>
               <DialogDescription>{priceAdjustItem?.procedure_name}</DialogDescription>
@@ -3450,7 +3481,7 @@ export function PatientDentalPlansSection({
                 Salvar valor
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         {/* Edit item dialog */}
@@ -3463,7 +3494,7 @@ export function PatientDentalPlansSection({
             }
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <NestedDialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>
                 {showCommercialDetails ? 'Editar procedimento' : 'Editar item'}
@@ -3627,7 +3658,7 @@ export function PatientDentalPlansSection({
                 Salvar
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <Dialog
@@ -3640,7 +3671,7 @@ export function PatientDentalPlansSection({
             }
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <NestedDialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Motivo do indeferimento</DialogTitle>
               <DialogDescription>
@@ -3683,7 +3714,7 @@ export function PatientDentalPlansSection({
                 Confirmar indeferimento
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <Dialog
@@ -3694,7 +3725,7 @@ export function PatientDentalPlansSection({
             if (!open) setAcceptDefineOpen(false);
           }}
         >
-          <DialogContent className="flex max-h-[90dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <NestedDialogContent className="flex max-h-[90dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
             <DialogHeader className="sr-only">
               <DialogTitle>Venda do plano de tratamento</DialogTitle>
               <DialogDescription>
@@ -3747,7 +3778,7 @@ export function PatientDentalPlansSection({
                 Concluir venda
               </Button>
             </div>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <Dialog
@@ -3758,7 +3789,7 @@ export function PatientDentalPlansSection({
             if (!open) setPlanRejectReason('');
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <NestedDialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Indeferir plano</DialogTitle>
               <DialogDescription>
@@ -3798,7 +3829,7 @@ export function PatientDentalPlansSection({
                 Confirmar indeferimento
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </NestedDialogContent>
         </Dialog>
 
         <DentalPaymentConditionEditor
@@ -3881,7 +3912,7 @@ export function PatientDentalPlansSection({
       </PatientTabPanelSection>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent
+        <NestedDialogContent
           className="z-[1800] sm:max-w-md"
           overlayClassName="z-[1800]"
         >
@@ -3972,7 +4003,7 @@ export function PatientDentalPlansSection({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Criar plano'}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </NestedDialogContent>
       </Dialog>
 
       <AlertDialog
@@ -3981,7 +4012,7 @@ export function PatientDentalPlansSection({
           if (!open && !busy) setDeletePlanId(null);
         }}
       >
-        <AlertDialogContent>
+        <NestedAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir plano?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -4005,7 +4036,7 @@ export function PatientDentalPlansSection({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir'}
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </NestedAlertDialogContent>
       </AlertDialog>
     </div>
   );
