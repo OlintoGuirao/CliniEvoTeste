@@ -19,6 +19,26 @@ export function clinicProcedureLabelFromNotes(notes: string | null | undefined):
   return parseSalonProcedureFromNotes(notes).procedure;
 }
 
+/** Normaliza rótulo de tipo de atendimento da agenda clínica. */
+function normalizeClinicAppointmentTypeLabel(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Agendamento do tipo Avaliação (agenda clínica).
+ * Usado para abrir fluxo de plano/odontograma em vez de procedimentos autorizados.
+ */
+export function isClinicAvaliacaoAppointment(notes: string | null | undefined): boolean {
+  const label = clinicProcedureLabelFromNotes(notes);
+  if (!label) return false;
+  const normalized = normalizeClinicAppointmentTypeLabel(label);
+  return normalized === 'avaliacao' || normalized.startsWith('avaliacao ');
+}
+
 export function stripClinicAppointmentMetadataFromNotes(
   notes: string | null | undefined
 ): string | null {

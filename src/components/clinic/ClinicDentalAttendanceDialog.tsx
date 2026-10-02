@@ -21,7 +21,7 @@ type ClinicDentalAttendanceDialogProps = {
   preferCreatePlan?: boolean;
 };
 
-/** Pop-up com a aba Planos odontológicos (novo atendimento / recepção). */
+/** Pop-up com a aba Planos odontológicos (avaliação / recepção). */
 export function ClinicDentalAttendanceDialog({
   open,
   onOpenChange,
@@ -33,7 +33,10 @@ export function ClinicDentalAttendanceDialog({
 }: ClinicDentalAttendanceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(94dvh,960px)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl sm:rounded-xl">
+      <DialogContent
+        className="flex z-[1600] max-h-[min(94dvh,960px)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl sm:rounded-xl"
+        overlayClassName="z-[1600]"
+      >
         <DialogHeader className="shrink-0 border-b border-border/70 px-4 py-3 pr-12 sm:px-6">
           <DialogTitle className="text-base font-semibold sm:text-lg">
             {title}

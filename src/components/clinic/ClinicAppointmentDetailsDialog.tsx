@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2, MessageCircle, Stethoscope, Trash2, User } from 'lucide-react';
+import { ClipboardList, Loader2, MessageCircle, Stethoscope, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +23,7 @@ import {
   formatClinicAppointmentCode,
   formatPatientBirthLabel,
   formatRelativePt,
+  isClinicAvaliacaoAppointment,
   stripClinicAppointmentMetadataFromNotes,
 } from '@/lib/clinicAppointmentDetails';
 import {
@@ -56,6 +57,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClinicAppointmentStatusSelect } from '@/components/clinic/ClinicAppointmentStatusSelect';
 import { ClinicPatientProfileDialog } from '@/components/clinic/ClinicPatientProfileDialog';
+import { ClinicDentalAttendanceDialog } from '@/components/clinic/ClinicDentalAttendanceDialog';
 import {
   listClinicProcedureSessionsForPatient,
   type ClinicProcedureSessionRow,
@@ -165,6 +167,7 @@ export function ClinicAppointmentDetailsDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState('detalhes');
   const [profilePopup, setProfilePopup] = useState(false);
+  const [avaliacaoPopup, setAvaliacaoPopup] = useState(false);
 
   const selected = useMemo(() => {
     if (appointments.length === 0) return null;
@@ -184,6 +187,7 @@ export function ClinicAppointmentDetailsDialog({
     setTab('detalhes');
     setConfirmDelete(false);
     setProfilePopup(false);
+    setAvaliacaoPopup(false);
   }, [open]);
 
   useEffect(() => {
@@ -297,6 +301,7 @@ export function ClinicAppointmentDetailsDialog({
     selected?.pre_registration_phone ??
     null;
   const procedureLabel = selected ? clinicProcedureLabelFromNotes(selected.notes) : null;
+  const isAvaliacao = selected ? isClinicAvaliacaoAppointment(selected.notes) : false;
   const userNotes = selected ? stripClinicAppointmentMetadataFromNotes(selected.notes) : null;
   const status = resolveClinicAppointmentStatus({
     clinicStatus: extras?.clinic_status ?? selected?.clinic_status,
@@ -439,6 +444,10 @@ export function ClinicAppointmentDetailsDialog({
                         variant="outline"
                         className="gap-1.5"
                         onClick={() => {
+                          if (isAvaliacao) {
+                            setAvaliacaoPopup(true);
+                            return;
+                          }
                           onOpenChange(false);
                           const qs = new URLSearchParams({
                             appointmentId: selected.id,
@@ -447,8 +456,12 @@ export function ClinicAppointmentDetailsDialog({
                           navigate(`/patients/${selected.patient_id}/session/new?${qs.toString()}`);
                         }}
                       >
-                        <Stethoscope className="h-3.5 w-3.5" />
-                        Novo atendimento
+                        {isAvaliacao ? (
+                          <ClipboardList className="h-3.5 w-3.5" />
+                        ) : (
+                          <Stethoscope className="h-3.5 w-3.5" />
+                        )}
+                        {isAvaliacao ? 'Nova avaliação' : 'Novo atendimento'}
                       </Button>
                       <Button
                         type="button"
@@ -741,6 +754,14 @@ export function ClinicAppointmentDetailsDialog({
         }}
       />
 
+      <ClinicDentalAttendanceDialog
+        open={avaliacaoPopup && Boolean(selected?.patient_id)}
+        onOpenChange={setAvaliacaoPopup}
+        patientId={selected?.patient_id ?? null}
+        patientName={patientName}
+        title="Nova avaliação"
+        preferCreatePlan
+      />
     </>
   );
 }

@@ -3,6 +3,7 @@ import {
   clinicProcedureLabelFromNotes,
   formatClinicAppointmentCode,
   formatPatientBirthLabel,
+  isClinicAvaliacaoAppointment,
   stripClinicAppointmentMetadataFromNotes,
 } from './clinicAppointmentDetails';
 
@@ -19,6 +20,12 @@ describe('clinicAppointmentDetails', () => {
     ].join('\n');
     expect(clinicProcedureLabelFromNotes(notes)).toBe('Botox (Toxina Botulínica)');
     expect(stripClinicAppointmentMetadataFromNotes(notes)).toBe('Retorno em 4 meses');
+  });
+
+  it('reconhece agendamento de avaliação', () => {
+    expect(isClinicAvaliacaoAppointment('Procedimento: Avaliação\nAvaliação Digital')).toBe(true);
+    expect(isClinicAvaliacaoAppointment('Procedimento: Tratamento')).toBe(false);
+    expect(isClinicAvaliacaoAppointment(null)).toBe(false);
   });
 
   it('formata nascimento com idade', () => {

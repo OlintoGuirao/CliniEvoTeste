@@ -3827,7 +3827,10 @@ export function PatientDentalPlansSection({
       </PatientTabPanelSection>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="z-[1800] sm:max-w-md"
+          overlayClassName="z-[1800]"
+        >
           <DialogHeader>
             <DialogTitle>Novo plano de tratamento</DialogTitle>
             <DialogDescription>
