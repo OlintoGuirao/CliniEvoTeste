@@ -16,7 +16,17 @@ export function formatClinicAppointmentCode(id: string): string {
 }
 
 export function clinicProcedureLabelFromNotes(notes: string | null | undefined): string | null {
-  return parseSalonProcedureFromNotes(notes).procedure;
+  const fromStart = parseSalonProcedureFromNotes(notes).procedure;
+  if (fromStart) return fromStart;
+
+  // Fallback: "Procedimento: …" em qualquer linha (não só no início).
+  const raw = notes?.trim();
+  if (!raw) return null;
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.trim().match(/^Procedimento:\s*(.+)$/i);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return null;
 }
 
 /** Normaliza rótulo de tipo de atendimento da agenda clínica. */
@@ -33,10 +43,20 @@ function normalizeClinicAppointmentTypeLabel(value: string): string {
  * Usado para abrir fluxo de plano/odontograma em vez de procedimentos autorizados.
  */
 export function isClinicAvaliacaoAppointment(notes: string | null | undefined): boolean {
-  const label = clinicProcedureLabelFromNotes(notes);
-  if (!label) return false;
-  const normalized = normalizeClinicAppointmentTypeLabel(label);
-  return normalized === 'avaliacao' || normalized.startsWith('avaliacao ');
+  const raw = notes?.trim();
+  if (!raw) return false;
+
+  // Preferência: linha "Procedimento: Avaliação"
+  const label = clinicProcedureLabelFromNotes(raw);
+  if (label) {
+    const normalized = normalizeClinicAppointmentTypeLabel(label);
+    if (normalized === 'avaliacao' || normalized.startsWith('avaliacao ')) return true;
+  }
+
+  // Fallback: metadata procedure_context:avaliacao (agenda clínica)
+  if (/(^|\n)\s*procedure_context:\s*avaliacao\b/i.test(raw)) return true;
+
+  return false;
 }
 
 export function stripClinicAppointmentMetadataFromNotes(

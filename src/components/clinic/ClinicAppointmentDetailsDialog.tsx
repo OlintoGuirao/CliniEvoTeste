@@ -441,7 +441,7 @@ export function ClinicAppointmentDetailsDialog({
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant={isAvaliacao ? 'default' : 'outline'}
                         className="gap-1.5"
                         onClick={() => {
                           if (isAvaliacao) {

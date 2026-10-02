@@ -24,6 +24,10 @@ describe('clinicAppointmentDetails', () => {
 
   it('reconhece agendamento de avaliação', () => {
     expect(isClinicAvaliacaoAppointment('Procedimento: Avaliação\nAvaliação Digital')).toBe(true);
+    expect(
+      isClinicAvaliacaoAppointment('Procedimento: Avaliação\nprocedure_context:avaliacao\nAvaliação Digital')
+    ).toBe(true);
+    expect(isClinicAvaliacaoAppointment('procedure_context:avaliacao\nAvaliação Digital')).toBe(true);
     expect(isClinicAvaliacaoAppointment('Procedimento: Tratamento')).toBe(false);
     expect(isClinicAvaliacaoAppointment(null)).toBe(false);
   });
