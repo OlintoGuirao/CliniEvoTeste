@@ -456,6 +456,7 @@ export function PatientDentalPlansSection({
     const members = teamQuery.data?.members ?? [];
     return members.filter((m) => {
       if (m.is_blocked) return false;
+      if (m.role === 'attendant') return false;
       if (m.role === 'owner' || m.role === 'professional') {
         const body = resolveProfileRegistryBody(
           m.professional_registry_body,
@@ -470,46 +471,74 @@ export function PatientDentalPlansSection({
   const responsibleOptions = useMemo(() => {
     const byId = new Map(clinicalMembers.map((m) => [m.user_id, m]));
     const team = teamQuery.data?.members ?? [];
-    const clinicalIds = new Set(clinicalMembers.map((m) => m.user_id));
 
     const ensureMember = (
       userId: string | null | undefined,
-      fallbackName?: string | null
+      fallbackName?: string | null,
+      opts?: { allowAttendant?: boolean }
     ) => {
       if (!userId || byId.has(userId)) return;
       const fromTeam = team.find((m) => m.user_id === userId && !m.is_blocked);
       if (fromTeam) {
+        if (fromTeam.role === 'attendant' && !opts?.allowAttendant) return;
         byId.set(userId, fromTeam);
         return;
       }
       const fromAgenda = (agendaProsQuery.data ?? []).find((p) => p.userId === userId);
+      if (!fromAgenda && !opts?.allowAttendant && !fallbackName) {
+        // Sem nome e sem vínculo na agenda clínica → não inclui (evita UUID na lista).
+        return;
+      }
+      if (!fromAgenda && !fallbackName) return;
       byId.set(userId, {
         membership_id: `local:${userId}`,
         user_id: userId,
         role: 'professional',
         created_at: '',
         email: '',
-        full_name: fromAgenda?.name ?? fallbackName ?? null,
+        full_name: fromAgenda?.name?.trim() || fallbackName?.trim() || null,
         is_blocked: false,
         account_type: 'clinic',
       } as (typeof clinicalMembers)[number]);
     };
 
-    // Se a API de equipe falhou (ex.: recepção), monta lista pela agenda
-    if (byId.size === 0) {
-      for (const p of agendaProsQuery.data ?? []) {
-        ensureMember(p.userId, p.name);
+    // Fonte principal: profissionais da agenda (exclui recepção).
+    for (const p of agendaProsQuery.data ?? []) {
+      ensureMember(p.userId, p.name);
+    }
+
+    // Complementa com membros clínicos da equipe (quando a API master responde).
+    for (const m of clinicalMembers) {
+      ensureMember(m.user_id, m.full_name);
+    }
+
+    // Só inclui o profissional da ficha se for clínico (não recepção).
+    if (patientProfessionalId) {
+      const onAgenda = (agendaProsQuery.data ?? []).some((p) => p.userId === patientProfessionalId);
+      const onClinical = clinicalMembers.some((m) => m.user_id === patientProfessionalId);
+      if (onAgenda || onClinical) {
+        ensureMember(patientProfessionalId, null);
       }
     }
 
-    if (professionalId && clinicalIds.has(professionalId)) {
-      ensureMember(professionalId, profile?.full_name);
+    // Usuário logado só entra se for clínico.
+    if (professionalId) {
+      const onAgenda = (agendaProsQuery.data ?? []).some((p) => p.userId === professionalId);
+      const onClinical = clinicalMembers.some((m) => m.user_id === professionalId);
+      if (onAgenda || onClinical || isClinicClinicalProfessional) {
+        ensureMember(professionalId, profile?.full_name);
+      }
     }
-    ensureMember(patientProfessionalId, null);
 
     return Array.from(byId.values()).sort((a, b) => {
-      const nameA = a.full_name?.trim() || a.email?.trim() || a.user_id;
-      const nameB = b.full_name?.trim() || b.email?.trim() || b.user_id;
+      const nameA =
+        a.full_name?.trim() ||
+        a.email?.trim() ||
+        'Profissional';
+      const nameB =
+        b.full_name?.trim() ||
+        b.email?.trim() ||
+        'Profissional';
       return nameA.localeCompare(nameB, 'pt-BR');
     });
   }, [
@@ -519,6 +548,7 @@ export function PatientDentalPlansSection({
     professionalId,
     patientProfessionalId,
     profile?.full_name,
+    isClinicClinicalProfessional,
   ]);
 
   const professionalNameById = useMemo(() => {
@@ -531,6 +561,10 @@ export function PatientDentalPlansSection({
       const name = m.full_name?.trim() || m.email?.trim();
       if (name) map.set(m.user_id, name);
     }
+    for (const p of agendaProsQuery.data ?? []) {
+      const name = p.name?.trim();
+      if (name && !map.has(p.userId)) map.set(p.userId, name);
+    }
     for (const m of responsibleOptions) {
       if (map.has(m.user_id)) continue;
       const name = m.full_name?.trim() || m.email?.trim();
@@ -542,8 +576,17 @@ export function PatientDentalPlansSection({
     profile?.full_name,
     profile?.email,
     teamQuery.data?.members,
+    agendaProsQuery.data,
     responsibleOptions,
   ]);
+
+  const optionIdsMissingName = useMemo(
+    () =>
+      responsibleOptions
+        .map((m) => m.user_id)
+        .filter((id) => !professionalNameById.has(id)),
+    [responsibleOptions, professionalNameById]
+  );
 
   const planProfessionalIds = useMemo(() => {
     const ids = new Set<string>();
@@ -554,10 +597,10 @@ export function PatientDentalPlansSection({
     return [...ids];
   }, [plans]);
 
-  const missingProfessionalIds = useMemo(
-    () => planProfessionalIds.filter((id) => !professionalNameById.has(id)),
-    [planProfessionalIds, professionalNameById]
-  );
+  const missingProfessionalIds = useMemo(() => {
+    const fromPlans = planProfessionalIds.filter((id) => !professionalNameById.has(id));
+    return [...new Set([...fromPlans, ...optionIdsMissingName])];
+  }, [planProfessionalIds, professionalNameById, optionIdsMissingName]);
 
   const profilesNameQuery = useQuery({
     queryKey: ['dental-plan-professional-names', missingProfessionalIds.join(',')],
@@ -577,10 +620,18 @@ export function PatientDentalPlansSection({
     const map = new Map(professionalNameById);
     for (const row of profilesNameQuery.data ?? []) {
       const name = row.full_name?.trim();
-      if (name && !map.has(row.id)) map.set(row.id, name);
+      if (name) map.set(row.id, name);
     }
     return map;
   }, [professionalNameById, profilesNameQuery.data]);
+
+  function responsibleOptionLabel(userId: string, fallbackName?: string | null): string {
+    return (
+      resolvedProfessionalNameById.get(userId) ||
+      fallbackName?.trim() ||
+      'Profissional'
+    );
+  }
 
   function resolvePlanResponsibleName(plan: DentalTreatmentPlanRow): string {
     const userId = plan.responsible_professional_id || plan.professional_id;
@@ -591,15 +642,18 @@ export function PatientDentalPlansSection({
   const defaultResponsibleId = useMemo(() => {
     const optionIds = new Set(responsibleOptions.map((m) => m.user_id));
     const clinicalIds = new Set(clinicalMembers.map((m) => m.user_id));
-    // 1) Profissional vinculado na ficha do paciente
+    // 1) Profissional clínico vinculado na ficha (não recepção)
     if (patientProfessionalId && optionIds.has(patientProfessionalId)) {
       return patientProfessionalId;
     }
-    // 2) Usuário logado, se for clínico
-    if (professionalId && clinicalIds.has(professionalId)) return professionalId;
+    // 2) Usuário logado, se for clínico e estiver na lista
+    if (professionalId && clinicalIds.has(professionalId) && optionIds.has(professionalId)) {
+      return professionalId;
+    }
     if (professionalId && isClinicClinicalProfessional && optionIds.has(professionalId)) {
       return professionalId;
     }
+    // 3) Primeiro dentista/profissional da lista clínica
     return clinicalMembers[0]?.user_id ?? responsibleOptions[0]?.user_id ?? '';
   }, [
     responsibleOptions,
@@ -3864,25 +3918,27 @@ export function PatientDentalPlansSection({
             </div>
             <div className="space-y-1.5">
               <Label>Profissional responsável</Label>
+              <p className="text-xs text-muted-foreground">
+                Dentista responsável pela avaliação / plano.
+              </p>
               <Select
                 value={newResponsibleId || undefined}
                 onValueChange={setNewResponsibleId}
               >
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Selecione o profissional">
+                  <SelectValue placeholder="Selecione o dentista">
                     {newResponsibleId
-                      ? responsibleOptions.find((m) => m.user_id === newResponsibleId)
-                          ?.full_name?.trim() ||
-                        responsibleOptions.find((m) => m.user_id === newResponsibleId)?.email ||
-                        resolvedProfessionalNameById.get(newResponsibleId) ||
-                        undefined
+                      ? responsibleOptionLabel(
+                          newResponsibleId,
+                          responsibleOptions.find((m) => m.user_id === newResponsibleId)?.full_name
+                        )
                       : undefined}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[1900]">
                   {responsibleOptions.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
-                      {m.full_name?.trim() || m.email || m.user_id}
+                      {responsibleOptionLabel(m.user_id, m.full_name)}
                     </SelectItem>
                   ))}
                 </SelectContent>
