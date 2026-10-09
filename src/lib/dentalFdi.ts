@@ -103,6 +103,25 @@ export function permanentToDeciduousFdi(tooth: string): string | null {
   return PERMANENT_TO_DECIDUOUS[n] ?? null;
 }
 
+/**
+ * Situações padrão do odontograma pediátrico (< 13 anos):
+ * - posições com decíduo correspondente → `deciduo` (chave permanente e FDI decíduo)
+ * - molares permanentes sem decíduo (16–18, etc.) → `ausente`
+ */
+export function buildPediatricOdontogramDefaults(): Record<string, DentalToothCondition> {
+  const map: Record<string, DentalToothCondition> = {};
+  for (const perm of PERMANENT_TEETH_FDI) {
+    const dec = permanentToDeciduousFdi(perm);
+    if (dec) {
+      map[perm] = 'deciduo';
+      map[dec] = 'deciduo';
+    } else {
+      map[perm] = 'ausente';
+    }
+  }
+  return map;
+}
+
 /** Converte decíduo → permanente (FDI). */
 export function deciduousToPermanentFdi(tooth: string): string | null {
   const n = normalizeFdiToothNumber(tooth);

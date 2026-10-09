@@ -11,6 +11,7 @@ import {
   Eraser,
   Loader2,
   MessageCircle,
+  MoreVertical,
   Pencil,
   Plus,
   ShieldCheck,
@@ -96,6 +97,7 @@ import {
   DENTAL_TOOTH_CONDITION_LABELS,
   facesForTooth,
   resolveToothNumberForDeciduousCondition,
+  buildPediatricOdontogramDefaults,
   resolveToothNumberForPermanentCondition,
   rootsForTooth,
   type DentalArchRegion,
@@ -103,6 +105,7 @@ import {
   type DentalToothCondition,
   type DentalToothFace,
 } from '@/lib/dentalFdi';
+import { getPatientAgeYears, isPediatricDentalPatient } from '@/lib/patientAge';
 import {
   calcDentalItemTotal,
   calcDentalPlanGrandTotal,
@@ -303,16 +306,21 @@ function itemLocationsAsSelection(
     }));
 }
 
+const PEDIATRIC_ODONTOGRAM_DEFAULTS = buildPediatricOdontogramDefaults();
+
 export function PatientDentalPlansSection({
   patientId,
   focusPlanId,
   preferCreatePlan = false,
+  patientDateOfBirth: patientDateOfBirthProp = null,
 }: {
   patientId: string;
   /** Quando informado, carrega e exibe somente este plano (pop-up da notificação). */
   focusPlanId?: string | null;
   /** Se true e não há planos, abre o dialog de criar plano após carregar. */
   preferCreatePlan?: boolean;
+  /** Data de nascimento (YYYY-MM-DD). Se omitida, busca no paciente. */
+  patientDateOfBirth?: string | null;
 }) {
   const queryClient = useQueryClient();
   const { user, profile } = useAuth();
@@ -333,6 +341,7 @@ export function PatientDentalPlansSection({
   const [conditionsByTooth, setConditionsByTooth] = useState<
     Record<string, DentalToothCondition>
   >({});
+  const [fetchedDateOfBirth, setFetchedDateOfBirth] = useState<string | null>(null);
   const [selectedTeeth, setSelectedTeeth] = useState<string[]>([]);
   const [faceFocusTooth, setFaceFocusTooth] = useState<string | null>(null);
   const [faceSelections, setFaceSelections] = useState<DentalToothFaceSelection[]>([]);
@@ -898,21 +907,31 @@ export function PatientDentalPlansSection({
     draftLocations,
   ]);
 
+  const patientDateOfBirth = patientDateOfBirthProp ?? fetchedDateOfBirth;
+  const isPediatricOdontogram = isPediatricDentalPatient(patientDateOfBirth);
+  const patientAgeYears = getPatientAgeYears(patientDateOfBirth);
+
+  /** Situações salvas sobrepõem o padrão pediátrico (< 13 anos → decíduos). */
+  const effectiveConditionsByTooth = useMemo(() => {
+    if (!isPediatricOdontogram) return conditionsByTooth;
+    return { ...PEDIATRIC_ODONTOGRAM_DEFAULTS, ...conditionsByTooth };
+  }, [isPediatricOdontogram, conditionsByTooth]);
+
   const missingSelected = useMemo(
     () =>
       selectedTeeth.filter((t) => {
-        const c = conditionsByTooth[t];
+        const c = effectiveConditionsByTooth[t];
         return c === 'ausente' || c === 'ausencia_coroa';
       }),
-    [selectedTeeth, conditionsByTooth]
+    [selectedTeeth, effectiveConditionsByTooth]
   );
 
   const absentTeethAll = useMemo(
     () =>
-      Object.entries(conditionsByTooth)
+      Object.entries(effectiveConditionsByTooth)
         .filter(([, c]) => c === 'ausente' || c === 'ausencia_coroa')
         .map(([t]) => t),
-    [conditionsByTooth]
+    [effectiveConditionsByTooth]
   );
 
   const itemsForSelectedTeeth = useMemo(() => {
@@ -948,6 +967,30 @@ export function PatientDentalPlansSection({
     for (const row of rows) map[row.tooth_number] = row.condition;
     setConditionsByTooth(map);
   }, [patientId]);
+
+  useEffect(() => {
+    if (patientDateOfBirthProp != null) {
+      setFetchedDateOfBirth(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('date_of_birth')
+        .eq('id', patientId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setFetchedDateOfBirth(null);
+        return;
+      }
+      setFetchedDateOfBirth((data?.date_of_birth as string | null) ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, patientDateOfBirthProp]);
 
   const refreshPlanDetail = useCallback(async (planId: string) => {
     const detail = await listDentalPlanItems(planId);
@@ -2201,44 +2244,78 @@ export function PatientDentalPlansSection({
   if (activePlan) {
     const responsibleName = resolvePlanResponsibleName(activePlan);
 
+    const planTypeLabel =
+      activePlan.plan_type === 'odontologico'
+        ? 'Odontológico'
+        : activePlan.plan_type.trim() || 'Odontológico';
+
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {lockedToPlan ? null : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              onClick={() => {
-                setActivePlanId(null);
-                clearSelection();
-              }}
-            >
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Planos
-            </Button>
-          )}
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-semibold text-foreground">{activePlan.name}</h3>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="secondary">{planStatusBadgeLabel(activePlan)}</Badge>
-              <span>Tipo: {activePlan.plan_type}</span>
-              <span>Resp.: {responsibleName}</span>
-              {activePlan.authorization_code ? (
-                <span className="font-mono">{activePlan.authorization_code}</span>
-              ) : null}
-              {activePlan.budget_quote_id ? (
-                <Link
-                  className="text-primary underline-offset-2 hover:underline"
-                  to={`/orcamento/${activePlan.budget_quote_id}`}
-                >
-                  Ver orçamento
-                </Link>
-              ) : null}
+        <header className="rounded-xl border border-border/50 bg-muted/15 px-3 py-3 sm:px-4">
+          <div className="flex items-start gap-2.5 sm:gap-3">
+            {lockedToPlan ? null : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mt-0.5 h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setActivePlanId(null);
+                  clearSelection();
+                }}
+                title="Voltar aos planos"
+                aria-label="Voltar aos planos"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                <h3 className="min-w-0 truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                  {activePlan.name}
+                </h3>
+                <Badge variant="secondary" className="shrink-0">
+                  {planStatusBadgeLabel(activePlan)}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span className="rounded-md bg-background/80 px-2 py-0.5 ring-1 ring-border/50">
+                  {planTypeLabel}
+                </span>
+                <span className="text-border/80" aria-hidden>
+                  ·
+                </span>
+                <span className="min-w-0 truncate">
+                  <span className="text-muted-foreground/80">Responsável </span>
+                  <span className="font-medium text-foreground/80">{responsibleName}</span>
+                </span>
+                {activePlan.authorization_code ? (
+                  <>
+                    <span className="text-border/80" aria-hidden>
+                      ·
+                    </span>
+                    <span className="font-mono tabular-nums">
+                      {activePlan.authorization_code}
+                    </span>
+                  </>
+                ) : null}
+                {activePlan.budget_quote_id ? (
+                  <>
+                    <span className="text-border/80" aria-hidden>
+                      ·
+                    </span>
+                    <Link
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                      to={`/orcamento/${activePlan.budget_quote_id}`}
+                    >
+                      Ver orçamento
+                    </Link>
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        </header>
 
         <PatientTabPanelSection
           title="Odontograma"
@@ -2319,9 +2396,17 @@ export function PatientDentalPlansSection({
             onSelectTooth={handleSelectTooth}
             faceSelections={faceSelections}
             onToggleFace={handleToggleFace}
-            conditionsByTooth={conditionsByTooth}
+            conditionsByTooth={effectiveConditionsByTooth}
             disabled={busy || isPlanEditLocked}
           />
+          {isPediatricOdontogram ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Paciente
+              {patientAgeYears != null ? ` com ${patientAgeYears} ano${patientAgeYears === 1 ? '' : 's'}` : ''}
+              : odontograma em dentição decídua (molares permanentes sem correspondente aparecem
+              ausentes). Situações salvas por dente têm prioridade.
+            </p>
+          ) : null}
 
           {!isPlanEditLocked ? (
           <Dialog open={selectionMenuOpen} onOpenChange={setSelectionMenuOpen}>
@@ -2412,29 +2497,28 @@ export function PatientDentalPlansSection({
         </PatientTabPanelSection>
 
         <PatientTabPanelSection title="Tabela de procedimentos">
-          <div id="dental-plan-procedures-list">
+          <div id="dental-plan-procedures-list" className="min-w-0">
           {items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nenhum procedimento ainda. Selecione dentes/faces no odontograma e adicione um
               procedimento.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+              <Table className="table-fixed" containerClassName="overflow-x-hidden">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Procedimento</TableHead>
-                    <TableHead>Dente/região</TableHead>
+                    <TableHead className="w-[22%] px-2 sm:px-2">Procedimento</TableHead>
+                    <TableHead className="w-[11%] px-2 sm:px-2">Dente/região</TableHead>
                     {showCommercialDetails ? (
                       <>
-                        <TableHead>Face</TableHead>
-                        <TableHead className="text-right">Quantidade</TableHead>
-                        <TableHead className="text-right">Valor unitário</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="w-[11%] px-2 sm:px-2">Face</TableHead>
+                        <TableHead className="w-[8%] whitespace-normal px-2 text-right sm:px-2">Quantidade</TableHead>
+                        <TableHead className="w-[12%] whitespace-normal px-2 text-right sm:px-2">Valor unitário</TableHead>
+                        <TableHead className="w-[11%] px-2 text-right sm:px-2">Total</TableHead>
                       </>
                     ) : null}
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[1%] whitespace-nowrap text-right">Ações</TableHead>
+                    <TableHead className="w-[12%] px-2 sm:px-2">Status</TableHead>
+                    <TableHead className="w-[13%] whitespace-normal px-2 text-right sm:px-2">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2448,31 +2532,31 @@ export function PatientDentalPlansSection({
                       activePlan.status === 'cancelled';
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="max-w-[200px] truncate font-medium">
+                        <TableCell className="truncate px-2 font-medium sm:px-2" title={item.procedure_name}>
                           {item.procedure_name}
                         </TableCell>
-                        <TableCell className="font-mono text-sm font-medium">
+                        <TableCell className="truncate px-2 font-mono text-sm font-medium sm:px-2">
                           {loc.toothOrRegion}
                         </TableCell>
                         {showCommercialDetails ? (
                           <>
-                            <TableCell className="text-sm text-muted-foreground">
+                            <TableCell className="truncate px-2 text-sm text-muted-foreground sm:px-2">
                               {loc.face}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">{item.quantity}</TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="px-2 text-right tabular-nums sm:px-2">{item.quantity}</TableCell>
+                            <TableCell className="truncate px-2 text-right tabular-nums sm:px-2">
                               {formatBrl(Number(item.unit_price))}
                             </TableCell>
-                            <TableCell className="text-right font-medium tabular-nums">
+                            <TableCell className="truncate px-2 text-right font-medium tabular-nums sm:px-2">
                               {formatBrl(Number(item.total_value))}
                             </TableCell>
                           </>
                         ) : null}
-                        <TableCell>
+                        <TableCell className="px-2 sm:px-2">
                           <Badge variant="outline">{itemStatusDisplayLabel(item)}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center justify-end gap-0.5">
+                        <TableCell className="px-1 text-right sm:px-1">
+                          <div className="flex items-center justify-end">
                             <Button
                               type="button"
                               size="icon"
@@ -2531,15 +2615,15 @@ export function PatientDentalPlansSection({
                                     type="button"
                                     size="icon"
                                     variant="ghost"
-                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
                                     disabled={statusEditLocked}
-                                    title="Situação"
-                                    aria-label="Situação"
+                                    title="Situação comercial"
+                                    aria-label="Situação comercial"
                                   >
-                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <MoreVertical className="h-3.5 w-3.5" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuContent align="end" className="z-[1900] w-56">
                                   <DropdownMenuLabel>Situação</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
                                   {COMMERCIAL_SITUATION_REASONS.map((reason) => (
@@ -2553,30 +2637,21 @@ export function PatientDentalPlansSection({
                                       {reason}
                                     </DropdownMenuItem>
                                   ))}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    disabled={busy || locked}
-                                    className="text-destructive focus:text-destructive"
-                                    onSelect={() => void handleDeleteItem(item.id)}
-                                  >
-                                    Excluir procedimento
-                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                disabled={locked}
-                                title="Excluir"
-                                aria-label="Excluir"
-                                onClick={() => void handleDeleteItem(item.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              disabled={locked}
+                              title="Excluir"
+                              aria-label="Excluir"
+                              onClick={() => void handleDeleteItem(item.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2584,14 +2659,14 @@ export function PatientDentalPlansSection({
                   })}
                   {showCommercialDetails ? (
                     <TableRow className="bg-muted/20 font-medium hover:bg-muted/20">
-                      <TableCell colSpan={3}>Totais</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="px-2 sm:px-2" colSpan={3}>Totais</TableCell>
+                      <TableCell className="px-2 text-right tabular-nums sm:px-2">
                         {items
                           .filter((i) => i.status !== 'rejected')
                           .reduce((sum, i) => sum + Number(i.quantity || 0), 0)}
                       </TableCell>
                       <TableCell />
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="px-2 text-right tabular-nums sm:px-2">
                         {formatBrl(
                           items
                             .filter((i) => i.status !== 'rejected')
@@ -2604,7 +2679,6 @@ export function PatientDentalPlansSection({
                   ) : null}
                 </TableBody>
               </Table>
-            </div>
           )}
           </div>
           {!showCommercialDetails ? (
@@ -2772,7 +2846,7 @@ export function PatientDentalPlansSection({
                 ) : (
                   <ul className="space-y-1 text-sm">
                     {selectedTeeth.map((tooth) => {
-                      const cond = conditionsByTooth[tooth];
+                      const cond = effectiveConditionsByTooth[tooth];
                       return (
                         <li
                           key={tooth}
@@ -2832,7 +2906,7 @@ export function PatientDentalPlansSection({
 
         {/* Procedure dialog */}
         <Dialog open={procedureOpen} onOpenChange={setProcedureOpen}>
-          <NestedDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <NestedDialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Adicionar procedimento</DialogTitle>
               <DialogDescription>
@@ -2841,7 +2915,7 @@ export function PatientDentalPlansSection({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-3">
               <div className="space-y-1.5">
                 <Label>
                   Procedimento <span className="text-destructive">*</span>
@@ -2856,20 +2930,20 @@ export function PatientDentalPlansSection({
                   }}
                   placeholder="Buscar procedimento…"
                 />
-                <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50">
+                <div className="max-h-36 min-w-0 overflow-x-hidden overflow-y-auto rounded-lg border border-border/50">
                   {filteredProcedures.map((p) => (
                     <button
                       key={p.id}
                       type="button"
-                      className="flex w-full px-3 py-2 text-left text-sm hover:bg-muted/60"
+                      className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
                       onClick={() => {
                         pickProcedure(p);
                         setProcSearch('');
                       }}
                     >
-                      <span className="truncate">{p.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
                       {p.specialty ? (
-                        <span className="ml-auto pl-2 text-xs text-muted-foreground">
+                        <span className="max-w-[42%] shrink-0 truncate text-xs text-muted-foreground">
                           {p.specialty}
                         </span>
                       ) : null}
@@ -3145,12 +3219,12 @@ export function PatientDentalPlansSection({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Desconto</Label>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 gap-2">
                     <Select
                       value={procDiscountType}
                       onValueChange={(v) => setProcDiscountType(v as MoneyAdjustType | 'none')}
                     >
-                      <SelectTrigger className="w-[110px] rounded-xl">
+                      <SelectTrigger className="w-[110px] shrink-0 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3160,7 +3234,7 @@ export function PatientDentalPlansSection({
                       </SelectContent>
                     </Select>
                     <Input
-                      className="rounded-xl"
+                      className="min-w-0 flex-1 rounded-xl"
                       value={procDiscountValue}
                       onChange={(e) => setProcDiscountValue(e.target.value)}
                       disabled={procDiscountType === 'none'}
@@ -3170,12 +3244,12 @@ export function PatientDentalPlansSection({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Acréscimo</Label>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 gap-2">
                     <Select
                       value={procSurchargeType}
                       onValueChange={(v) => setProcSurchargeType(v as MoneyAdjustType | 'none')}
                     >
-                      <SelectTrigger className="w-[110px] rounded-xl">
+                      <SelectTrigger className="w-[110px] shrink-0 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3185,7 +3259,7 @@ export function PatientDentalPlansSection({
                       </SelectContent>
                     </Select>
                     <Input
-                      className="rounded-xl"
+                      className="min-w-0 flex-1 rounded-xl"
                       value={procSurchargeValue}
                       onChange={(e) => setProcSurchargeValue(e.target.value)}
                       disabled={procSurchargeType === 'none'}
@@ -3966,7 +4040,7 @@ export function PatientDentalPlansSection({
                       : undefined}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="z-[1900]">
+                <SelectContent className="z-[2000]">
                   {responsibleOptions.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       {responsibleOptionLabel(m.user_id, m.full_name)}

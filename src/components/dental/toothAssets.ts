@@ -17,7 +17,24 @@ const deciduoRaw = import.meta.glob('./deciduos/*.svg', {
   import: 'default',
 }) as Record<string, string>;
 
-function buildMap(modules: Record<string, string>): Record<string, string> {
+/** PNGs permanentes (layout de referência). */
+const permanentePngModules = import.meta.glob('./Dentes/dente-*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+/** PNGs decíduos + placeholders de ausente (molares sem decíduo). */
+const deciduoPngModules = import.meta.glob('./DentesDeciduos/dente-*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+const mouthBgModules = import.meta.glob('./Dentes/boca-*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+function buildSvgMap(modules: Record<string, string>): Record<string, string> {
   const map: Record<string, string> = {};
   for (const [path, markup] of Object.entries(modules)) {
     const match = path.match(/(\d{2})\.svg$/);
@@ -27,11 +44,33 @@ function buildMap(modules: Record<string, string>): Record<string, string> {
   return map;
 }
 
-const PERMANENTE_RAW = buildMap(permanenteRaw);
-const DECIDUO_RAW = buildMap(deciduoRaw);
+function buildPngMap(modules: Record<string, string>): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [path, url] of Object.entries(modules)) {
+    const match = path.match(/dente-(\d{2})-/);
+    if (!match) continue;
+    map[match[1]] = url;
+  }
+  return map;
+}
+
+const PERMANENTE_RAW = buildSvgMap(permanenteRaw);
+const DECIDUO_RAW = buildSvgMap(deciduoRaw);
+const PERMANENTE_PNG = buildPngMap(permanentePngModules);
+const DECIDUO_PNG = buildPngMap(deciduoPngModules);
+
+/** Molares permanentes sem correspondente decíduo — usam placeholder “ausente” no chart pediátrico. */
+const AUSENTE_PLACEHOLDER_SLOTS = new Set([
+  '16', '17', '18', '26', '27', '28', '36', '37', '38', '46', '47', '48',
+]);
 
 export type ToothDentitionAttr = 'permanente' | 'deciduo';
 export type ToothRowAttr = 'superior' | 'inferior';
+
+export function getMouthBackgroundUrl(): string | null {
+  const urls = Object.values(mouthBgModules);
+  return urls[0] ?? null;
+}
 
 export function getToothDentition(tooth: string): ToothDentitionAttr | null {
   const n = normalizeFdiToothNumber(tooth);
@@ -55,13 +94,42 @@ export function getToothSvgRaw(tooth: string): string | null {
   return PERMANENTE_RAW[n] ?? DECIDUO_RAW[n] ?? null;
 }
 
+/**
+ * URL da PNG do dente (preferida no layout de referência).
+ * - permanente → Dentes/dente-XX-*.png
+ * - decíduo → DentesDeciduos/dente-XX-*.png (73 cai no SVG se PNG ausente)
+ * - ausente → placeholder em DentesDeciduos para molares sem decíduo
+ */
+export function getToothImageUrl(
+  tooth: string,
+  opts?: { missingTooth?: boolean; permanentSlot?: string }
+): string | null {
+  const n = normalizeFdiToothNumber(tooth);
+  if (!n) return null;
+
+  if (opts?.missingTooth) {
+    const slot = normalizeFdiToothNumber(opts.permanentSlot ?? n) ?? n;
+    if (AUSENTE_PLACEHOLDER_SLOTS.has(slot) && DECIDUO_PNG[slot]) {
+      return DECIDUO_PNG[slot];
+    }
+    return null;
+  }
+
+  if (isDeciduousFdi(n)) {
+    return DECIDUO_PNG[n] ?? null;
+  }
+  if (isPermanentFdi(n)) {
+    return PERMANENTE_PNG[n] ?? null;
+  }
+  return PERMANENTE_PNG[n] ?? DECIDUO_PNG[n] ?? null;
+}
+
 export function hasToothAsset(tooth: string): boolean {
-  return Boolean(getToothSvgRaw(tooth));
+  return Boolean(getToothSvgRaw(tooth) || getToothImageUrl(tooth));
 }
 
 /** @deprecated Prefer getToothSvgRaw — mantido para compat de testes. */
 export function getToothAssetUrl(tooth: string): string | null {
-  // Sem URL estática quando usamos ?raw; sinaliza existência via path sintético.
   const n = normalizeFdiToothNumber(tooth);
   if (!n || !hasToothAsset(n)) return null;
   const folder = isDeciduousFdi(n) ? 'deciduos' : 'permanentes';
@@ -103,7 +171,6 @@ export function prepareToothSvgMarkup(
   svg.style.height = '100%';
   svg.style.display = 'block';
 
-  // Uniciza ids internos (title/desc/clipPath etc.)
   const idMap = new Map<string, string>();
   svg.querySelectorAll('[id]').forEach((el) => {
     const oldId = el.getAttribute('id');
@@ -142,11 +209,9 @@ export function prepareToothSvgMarkup(
     hit.setAttribute('data-row', opts.row);
     hit.setAttribute('tabindex', '-1');
     hit.classList.toggle('selected', Boolean(opts.selected));
-    // Clique tratado no wrapper React — evita botão aninhado.
     hit.removeAttribute('role');
   }
 
-  // Alinha o highlight interno do SVG ao token do app.
   svg.querySelectorAll('style').forEach((styleEl) => {
     const css = styleEl.textContent || '';
     styleEl.textContent = css.replace(/#25a7a0/gi, '#2fa7a0').replace(/#168b86/gi, '#248f89');

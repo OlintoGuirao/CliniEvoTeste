@@ -191,7 +191,10 @@ export function DentalPaymentConditionEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+      <DialogContent
+        className="z-[1900] max-h-[90dvh] overflow-y-auto sm:max-w-md"
+        overlayClassName="z-[1900]"
+      >
         <DialogHeader>
           <DialogTitle>
             {editingId ? 'Editar condição de pagamento' : 'Definir condição de pagamento'}

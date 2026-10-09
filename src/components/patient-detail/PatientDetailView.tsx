@@ -577,7 +577,10 @@ export function PatientDetailView({
           )}
 
           {activeTab === 'planos-odontologicos' && showDentalPlans && (
-            <PatientDentalPlansSection patientId={patient.id} />
+            <PatientDentalPlansSection
+              patientId={patient.id}
+              patientDateOfBirth={patient.date_of_birth}
+            />
           )}
 
           {activeTab === 'documentos' && showDentalPlans && (
